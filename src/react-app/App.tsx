@@ -548,7 +548,7 @@ function AppContent() {
                   {files.length > 0 && (
                     <div className="w-full flex flex-wrap gap-2 mt-2">
                       {files.map((file, idx) => (
-                        <div key={idx} className="relative flex flex-col items-center border rounded p-2 bg-[#232b36]">
+                        <div key={idx} className={`relative flex flex-col items-center border rounded p-2 bg-[#232b36] ${selected.includes(file.name) ? 'ring-2 ring-cyan-400 border-cyan-400' : ''}`}>
                           <button
                             className="absolute -top-2 -right-2 w-6 h-6 bg-[#232b36] text-gray-400 hover:text-red-400 rounded-full flex items-center justify-center shadow"
                             type="button"
@@ -557,7 +557,7 @@ function AppContent() {
                           >
                             ×
                           </button>
-                          <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" />
+                          <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" onClick={() => setSelected([...selected, file.name])} />
                           <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
                         </div>
                       ))}
@@ -704,7 +704,7 @@ function AppContent() {
                         <img
                           src={`/api/get_photo/${item.file_id}?thumb=1`}
                           alt={item.file_id}
-                          className={`w-full object-contain max-h-64 rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36] ${selectMode ? 'opacity-80' : ''}`}
+                          className={`w-full object-contain max-h-64 rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36] ${selectMode ? 'opacity-80' : ''} ${selectMode && selected.includes(item.file_id) ? 'ring-4 ring-cyan-400 border-cyan-400' : ''}`}
                           onClick={() => {
                             if (selectMode) {
                               if (selected.includes(item.file_id)) setSelected(prev => prev.filter(id => id !== item.file_id));

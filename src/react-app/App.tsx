@@ -633,8 +633,15 @@ function AppContent() {
                           type="file"
                           accept="image/x-icon,.ico,image/svg+xml,.svg,image/png,.png,image/jpeg,.jpg,.jpeg,image/gif,.gif,image/bmp,.bmp,image/webp,.webp"
                           onChange={e => setFaviconFile(e.target.files?.[0] || null)}
-                          className="text-xs flex-1"
+                          className="hidden"
+                          id="favicon-upload"
                         />
+                        <button
+                          type="button"
+                          className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-cyan-700 mr-3"
+                          onClick={() => document.getElementById('favicon-upload')?.click()}
+                        >选择文件</button>
+                        <span className="text-xs text-gray-400 truncate max-w-[120px] inline-block align-middle">{faviconFile?.name || ''}</span>
                         <button
                           className="ml-3 px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
                           onClick={async () => {

@@ -319,7 +319,7 @@ function AppContent() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {history.map(item => {
               // 兼容老数据
-              const shortUrl = `${SHORTLINK_DOMAIN || window.location.origin}/${item.short_code || ''}`;
+              const shortUrl = `${SHORTLINK_DOMAIN || window.location.origin}/img/${item.short_code || ''}`;
               const md = `![](${shortUrl})`;
               const html = `<img src=\"${shortUrl}\" />`;
               return (
@@ -366,12 +366,4 @@ function AppContent() {
   );
 }
 
-function App() {
-  return (
-    <ErrorBoundary>
-      <AppContent />
-    </ErrorBoundary>
-  );
-}
-
-export default App;
+export default AppContent;

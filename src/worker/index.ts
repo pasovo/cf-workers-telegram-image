@@ -149,8 +149,8 @@ app.post('/api/upload', async (c) => {
   }
 });
 
-// 根路径短链访问
-app.get('/:short_code', async (c) => {
+// /img/:short_code 直链访问
+app.get('/img/:short_code', async (c) => {
   const { short_code } = c.req.param();
   const { DB } = c.env;
   // 查找短码
@@ -237,11 +237,6 @@ app.get('/api/test-db', async (c) => {
       message: error instanceof Error ? error.message : '\u6570\u636e\u5e93\u64cd\u4f5c\u5931\u8d25'
     }, { status: 500 });
   }
-});
-
-// 兜底路由，返回前端 index.html
-app.get('/*', (c) => {
-  return c.html(indexHtml);
 });
 
 export default app;

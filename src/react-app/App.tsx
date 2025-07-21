@@ -2,7 +2,25 @@
 import { useState, useRef, useEffect } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 
-// 添加错误边界组件
+// 全局弹窗组件
+function Toast({ message, type = 'info', onClose }: { message: string; type?: 'info' | 'error' | 'success'; onClose: () => void }) {
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(onClose, 2500);
+    return () => clearTimeout(timer);
+  }, [message, onClose]);
+  if (!message) return null;
+  let bg = 'bg-blue-600';
+  if (type === 'error') bg = 'bg-red-600';
+  if (type === 'success') bg = 'bg-green-600';
+  return (
+    <div className={`fixed top-6 left-1/2 z-50 -translate-x-1/2 px-6 py-3 rounded shadow-lg text-white text-base font-medium ${bg} animate-fade-in`} style={{minWidth: 200, maxWidth: '90vw'}}>
+      {message}
+    </div>
+  );
+}
+
+// 错误边界组件
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
   const [hasError, setHasError] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -13,14 +31,13 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
       setError(e.error);
       e.preventDefault();
     };
-
     window.addEventListener('error', handleError);
     return () => window.removeEventListener('error', handleError);
   }, []);
 
   if (hasError) {
     return (
-      <div className="p-6 text-center">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
         <h2 className="text-2xl text-red-600 mb-4">页面加载出错</h2>
         <p className="text-gray-700 mb-2">{error?.message}</p>
         <button 
@@ -32,7 +49,6 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-
   return <>{children}</>;
 }
 
@@ -40,13 +56,15 @@ function AppContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string }>>([]);
   const [page, setPage] = useState(1);
-  const [limit] = useState(8); // 每页条数
+  const [limit] = useState(8);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 8, total: 0 });
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' }>({ message: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '') => {
@@ -66,8 +84,7 @@ function AppContent() {
         });
       }
     } catch (error) {
-      console.error('Failed to fetch history:', error);
-      alert('加载历史记录失败，请刷新页面重试');
+      setToast({ message: '加载历史记录失败，请刷新页面重试', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -82,7 +99,6 @@ function AppContent() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setSelectedFile(file);
-
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
@@ -95,31 +111,51 @@ function AppContent() {
     e.preventDefault();
     if (!selectedFile) return;
     setPending(true);
-
+    setUploadProgress(0);
     try {
       const formData = new FormData(e.currentTarget);
-      const response = await fetch('/api/upload', { method: 'POST', body: formData });
-      const res = await response.json();
-
-      if (res.status === 'success') {
-        alert('图片已成功上传到 Telegram');
-        setSelectedFile(null);
-        setPreviewUrl(null);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        setPage(1);
-        setSearch('');
-        setSearchInput('');
-        fetchHistory(1, limit, '');
-      } else {
-        alert(`上传失败: ${res.message || '未知错误'}`);
-      }
+      // 使用 XMLHttpRequest 以便获取上传进度
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload');
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setUploadProgress(Math.round((event.loaded / event.total) * 100));
+          }
+        };
+        xhr.onload = () => {
+          try {
+            const res = JSON.parse(xhr.responseText);
+            if (xhr.status === 200 && res.status === 'success') {
+              setToast({ message: '图片已成功上传到 Telegram', type: 'success' });
+              setSelectedFile(null);
+              setPreviewUrl(null);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+              setPage(1);
+              setSearch('');
+              setSearchInput('');
+              fetchHistory(1, limit, '');
+              resolve();
+            } else {
+              setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
+              reject(new Error(res.message || '上传失败'));
+            }
+          } catch (err) {
+            setToast({ message: '上传失败，服务器响应异常', type: 'error' });
+            reject(err);
+          }
+        };
+        xhr.onerror = () => {
+          setToast({ message: '上传失败，请重试', type: 'error' });
+          reject(new Error('上传失败'));
+        };
+        xhr.send(formData);
+      });
     } catch (error) {
-      console.error('Upload error:', error);
-      alert('上传失败，请重试');
+      // 错误已在 xhr.onload/onerror 处理
     } finally {
       setPending(false);
+      setUploadProgress(0);
     }
   };
 
@@ -128,27 +164,19 @@ function AppContent() {
     setPage(1);
     setSearch(searchInput.trim());
   };
-
   // 回车搜索
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+    if (e.key === 'Enter') handleSearch();
   };
-
   // 分页按钮
-  const handlePrevPage = () => {
-    if (page > 1) setPage(page - 1);
-  };
-  const handleNextPage = () => {
-    if (history.length === limit) setPage(page + 1);
-  };
+  const handlePrevPage = () => { if (page > 1) setPage(page - 1); };
+  const handleNextPage = () => { if (history.length === limit) setPage(page + 1); };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6 text-center">图片上传到 Telegram</h1>
-
-      <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-4xl">
+      <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
+      <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-center">图片上传到 Telegram</h1>
+      <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-4 sm:p-6">
         <form className="space-y-4" onSubmit={handleSubmit}>
           {/* 文件上传区域 */}
           <div className="space-y-2">
@@ -171,7 +199,6 @@ function AppContent() {
                 ref={fileInputRef}
               />
             </label>
-
             {selectedFile && (
               <div className="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded-md flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
@@ -180,7 +207,6 @@ function AppContent() {
                 <span>{selectedFile.name}</span>
               </div>
             )}
-
             {previewUrl && (
               <div className="mt-4">
                 <p className="text-sm text-gray-600 mb-2">图片预览:</p>
@@ -194,24 +220,36 @@ function AppContent() {
               </div>
             )}
           </div>
-
+          {/* 上传进度条 */}
+          {pending && (
+            <div className="w-full h-3 bg-gray-200 rounded overflow-hidden animate-pulse">
+              <div
+                className="h-full bg-blue-500 transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          )}
           <div className="pt-2">
             <button
               type="submit"
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
               disabled={pending || !selectedFile}
             >
-              {pending ? '上传中...' : '上传到 Telegram'}
+              {pending ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                  上传中...
+                </span>
+              ) : '上传到 Telegram'}
             </button>
           </div>
         </form>
       </div>
-
       {/* 历史记录区域 */}
-      <div className="mt-12 max-w-3xl mx-auto">
-        <h2 className="text-2xl font-semibold mb-4">上传历史记录</h2>
+      <div className="mt-8 sm:mt-12 max-w-3xl mx-auto">
+        <h2 className="text-xl sm:text-2xl font-semibold mb-4">上传历史记录</h2>
         {/* 搜索栏 */}
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
           <input
             type="text"
             placeholder="搜索 file_id 或 chat_id"
@@ -245,18 +283,21 @@ function AppContent() {
         {loading ? (
           <p className="text-gray-500 text-center py-6">加载中...</p>
         ) : history.length === 0 ? (
-          <p className="text-gray-500 text-center py-6">暂无上传记录</p>
+          <div className="flex flex-col items-center justify-center py-10">
+            <svg className="w-16 h-16 text-gray-300 mb-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <p className="text-gray-500 text-center">暂无上传记录</p>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {history.map(item => (
-              <div key={item.id} className="border rounded-lg p-4 flex items-center gap-3 hover:shadow-md transition-shadow">
+              <div key={item.id} className="border rounded-lg p-4 flex items-center gap-3 hover:shadow-md transition-shadow bg-white">
                 <img 
                   src={`/api/get_photo/${item.file_id}`} 
                   alt="History preview" 
                   className="w-20 h-20 object-cover rounded"
                   onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/100?text=加载失败'}
                 />
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate max-w-[200px]">{item.file_id}</p>
                   <p className="text-xs text-gray-500">{new Date(item.created_at).toLocaleString()}</p>
                 </div>

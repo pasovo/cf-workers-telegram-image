@@ -1,116 +1,78 @@
-# Telegram 图片上传工具
+<h1 align="center">Sasovo Cloudflare Workers 图床</h1>
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/houhoz/cf-workers-telegram-image)
+> 基于 Cloudflare Workers + Telegram Bot 的免费图片直链/图床系统，支持多文件上传、批量管理、标签分类、现代美观 UI。
+[感谢原项目,根据此项目修改而来](https://github.com/houhoz/cf-workers-telegram-image)
 
-一个基于 Cloudflare Workers 的图片上传工具，可以将图片直接上传到 Telegram 频道或群组，并获取图片的 file_id，方便后续使用。
+![screenshot](./preview.png)
 
-![预览图](./preview.png)
+---
 
-## ✨ 功能特点
+## ✨ 主要特性
 
-- 🖼️ 图片上传预览 - 选择图片后可在上传前预览
-- 🚀 一键上传到 Telegram - 直接发送图片到配置的 Telegram 频道/群组
-- 📋 自动获取 file_id - 上传成功后显示图片信息和 file_id，支持一键复制
-- 🌐 全球加速 - 基于 Cloudflare Workers 的全球边缘网络，上传速度更快
-- 🔒 安全可靠 - 使用 Telegram Bot API，无需存储图片，安全且稳定
+- **多文件上传**：支持批量、拖拽、粘贴、压缩上传
+- **永久直链**：图片直链可用于 Markdown/HTML/外链
+- **标签分类**：支持标签管理与筛选
+- **批量操作**：批量删除、导出历史记录
+- **现代 UI**：深色主题、卡片风格、响应式设计
+- **Cloudflare D1**：数据安全、全球加速、免费额度
+- **自定义页面标题/网站图标**：支持在设置页自定义网站标题和 favicon
 
-## 🛠️ 技术栈
-
-- [**React**](https://react.dev/) - 用户界面库
-- [**Vite**](https://vite.dev/) - 前端构建工具
-- [**Hono**](https://hono.dev/) - 轻量级后端框架
-- [**Cloudflare Workers**](https://developers.cloudflare.com/workers/) - 边缘计算平台
-- [**TailwindCSS**](https://tailwindcss.com/) - 实用优先的 CSS 框架
+---
 
 ## 🚀 快速开始
+准备工作
+   - 创建 Bot 并获取 Token，并通过@getidbot获取你的 Chat ID
 
-### 本地开发
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button?projectName=cf-workers-telegram-image)](https://deploy.workers.cloudflare.com/?url=https://github.com/pasovo/cf-workers-telegram-image)
 
-1. 克隆项目并安装依赖：
+1. **一键部署**
+   - 点击上方按钮，登录 Cloudflare 账号，自动 fork 并部署本项目。
 
-```bash
-git clone https://github.com/houhoz/cf-workers-telegram-image.git
-cd cf-workers-telegram-image
-npm install
-```
+2. **配置环境变量**
+   - 在 Cloudflare 控制台「设置」-「变量与机密」中，配置以下环境变量：
+     - `TG_BOT_TOKEN`：Telegram Bot Token
+     - `TG_CHAT_ID`：图片发送目标 Chat ID
+     - `ADMIN_USER`：登录用户名
+     - `ADMIN_PASS`：登录密码
+     - `SHORTLINK_DOMAIN`：自定义短链域名（可选）--域名其实写了自动获取，你用什么域名访问就会用什么域名显示直链，但不保证有人有需求所以就保留了
 
-2. 创建 `.dev.vars` 文件，添加以下环境变量：
+3. **初始化数据库**
+   - 首次部署后，请添加一个Cloudflare D1数据库，绑定变量名为DB（重要），数据库名称随意，在控制台执行以下 SQL 以初始化表结构：
+     ```sql
+     CREATE TABLE IF NOT EXISTS images (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       file_id TEXT NOT NULL,
+       chat_id TEXT NOT NULL,
+       short_code TEXT UNIQUE NOT NULL,
+       expire_at TIMESTAMP,
+       tags TEXT,
+       filename TEXT,
+       size INTEGER,
+       visit_count INTEGER DEFAULT 0,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     );
+     ```
 
-```
-TG_BOT_TOKEN=your_telegram_bot_token
-TG_CHAT_ID=your_telegram_chat_id
-```
+4. **访问你的域名!开始吧**
 
-3. 启动开发服务器：
+---
 
-```bash
-npm run dev
-```
+## 💡 常见问题
 
-应用将在 [http://localhost:5173](http://localhost:5173) 上运行。
+- **图片直链无法访问？**
+  - 检查 wrangler.json 不要配置 assets，所有路由交给 Worker 处理
+- **如何自定义页面标题/网站图标？**
+  - 进入“设置”页面，输入标题或上传 favicon 并保存即可，支持本地持久化
 
-### 部署到 Cloudflare Workers
+---
 
-1. 构建项目：
+## 🙏 致谢
 
-```bash
-npm run build
-```
+- [Cloudflare Workers](https://workers.cloudflare.com/)
+- [Telegram Bot API](https://core.telegram.org/bots/api)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [Hono](https://hono.dev/)
 
-2. 配置 Cloudflare Workers 密钥：
+---
 
-```bash
-wrangler secret put TG_BOT_TOKEN
-# 输入你的 Telegram Bot Token
-
-wrangler secret put TG_CHAT_ID
-# 输入你的 Telegram Chat ID
-```
-
-3. 部署到 Cloudflare Workers：
-
-```bash
-npm run deploy
-```
-
-## ⚙️ 配置说明
-
-### 必要配置
-
-| 环境变量 | 说明 |
-|---------|------|
-| `TG_BOT_TOKEN` | Telegram Bot 的 API Token，可以从 [@BotFather](https://t.me/BotFather) 获取 |
-| `TG_CHAT_ID` | 目标 Telegram 频道或群组的 ID，可以使用 [@userinfobot](https://t.me/userinfobot) 获取 |
-
-### Telegram Bot 设置
-
-1. 在 Telegram 中联系 [@BotFather](https://t.me/BotFather) 创建一个新的机器人
-2. 获取 API Token
-3. 将机器人添加到你的目标频道或群组，并授予管理员权限（至少需要发送消息权限）
-
-## 📝 使用方法
-
-1. 打开应用后，点击"选择图片"按钮上传本地图片
-2. 上传前可以预览图片
-3. 点击"上传到 Telegram"按钮将图片发送到配置的 Telegram 频道/群组
-4. 上传成功后，可以查看图片信息并复制 file_id 供其他应用使用
-
-## 🔗 在线演示
-
-访问 [cf-workers-telegram-image.houyazhao.workers.dev](https://cf-workers-telegram-image.houyazhao.workers.dev/) 查看在线演示。
-
-## 🤝 贡献
-
-欢迎提交 Issue 或 Pull Request 来改进这个项目！
-
-项目仓库：[https://github.com/houhoz/cf-workers-telegram-image](https://github.com/houhoz/cf-workers-telegram-image)
-
-## 📄 许可证
-
-MIT
-
-## 🔗 相关资源
-
-- [Telegram Bot API 文档](https://core.telegram.org/bots/api)
-- [Cloudflare Workers 文档](https://developers.cloudflare.com/workers/)
-- [Hono 文档](https://hono.dev/)
+> MIT License | By Sasovo

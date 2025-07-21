@@ -53,6 +53,25 @@ function AppContent() {
   const [fade, setFade] = useState(true);
   const [settings, setSettings] = useState<any>(null);
 
+  // 标签按钮相关
+  const [tagOptions, setTagOptions] = useState<string[]>(['二次元', '风景', '插画', '摄影']);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [showAddTag, setShowAddTag] = useState(false);
+  const [newTag, setNewTag] = useState('');
+
+  const handleToggleTag = (tag: string) => {
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  };
+  const handleAddTag = () => {
+    const tag = newTag.trim();
+    if (tag && !tagOptions.includes(tag)) {
+      setTagOptions(prev => [...prev, tag]);
+      setSelectedTags(prev => [...prev, tag]);
+    }
+    setNewTag('');
+    setShowAddTag(false);
+  };
+
   // Tab切换动画
   React.useEffect(() => {
     if (tab !== lastTab) {
@@ -182,7 +201,7 @@ function AppContent() {
       const formData = new FormData();
       formData.append('photo', uploadFile);
       formData.append('expire', expire);
-      formData.append('tags', tags);
+      formData.append('tags', selectedTags.join(','));
       formData.append('filename', filename ? filename : uploadFile.name);
       try {
         await new Promise<void>((resolve, reject) => {
@@ -213,6 +232,7 @@ function AppContent() {
       } catch {}
     }
     setFiles([]);
+    setSelectedTags([]);
     setPending(false);
     setUploadProgress(0);
     setPage(1);
@@ -429,30 +449,37 @@ function AppContent() {
                   </button>
                 </div>
                 {/* 标签输入 */}
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-300">标签：</label>
-                  <input
-                    className="border rounded px-2 py-1 flex-1 bg-[#232b36] text-gray-100"
-                    type="text"
-                    name="tags"
-                    placeholder="多个标签用逗号分隔"
-                    value={tags}
-                    onChange={e => setTags(e.target.value)}
-                  />
-                </div>
-                {/* 文件名输入 */}
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-300">文件名：</label>
-                  <input
-                    className="border rounded px-2 py-1 flex-1 bg-[#232b36] text-gray-100"
-                    type="text"
-                    name="filename"
-                    placeholder="自定义文件名"
-                    value={filename}
-                    onChange={e => setFilename(sanitizeFilename(e.target.value))}
-                    maxLength={64}
-                  />
-                  <span className="text-xs text-gray-400">仅字母数字._-</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-gray-300">标签：</span>
+                  {tagOptions.map(tag => (
+                    <button
+                      key={tag}
+                      type="button"
+                      className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 mr-1 mb-1 ${selectedTags.includes(tag) ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                      onClick={() => handleToggleTag(tag)}
+                    >
+                      {selectedTags.includes(tag) ? '✓ ' : ''}{tag}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-cyan-400 hover:border-cyan-400 mb-1"
+                    onClick={() => setShowAddTag(true)}
+                  >+
+                  </button>
+                  {showAddTag && (
+                    <input
+                      type="text"
+                      className="border rounded px-2 py-1 bg-[#232b36] text-gray-100 ml-2"
+                      placeholder="新标签"
+                      value={newTag}
+                      onChange={e => setNewTag(e.target.value)}
+                      onBlur={handleAddTag}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); }}
+                      autoFocus
+                      style={{ width: 80 }}
+                    />
+                  )}
                 </div>
                 {/* 有效期选择 */}
                 <div className="flex items-center gap-2">

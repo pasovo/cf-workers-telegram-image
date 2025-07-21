@@ -183,7 +183,7 @@ app.get('/img/:short_code', async (c) => {
   if (row.expire_at && new Date(String(row.expire_at)).getTime() < Date.now()) {
     return c.text('链接已过期', 410);
   }
-  // 代理图片内容
+  // 只返回原图
   const TG_BOT_TOKEN = c.env.TG_BOT_TOKEN;
   const getFileResponse = await fetch(
     `https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${row.file_id}`

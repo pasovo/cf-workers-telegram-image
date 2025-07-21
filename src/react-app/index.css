@@ -1,6 +1,41 @@
 @import "tailwindcss";
 
+@layer base {
+  html {
+    background: #10151b;
+    color: #e5e7eb;
+  }
+  body {
+    background: #10151b;
+    color: #e5e7eb;
+    font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  }
+}
+
 @layer utilities {
   .animate-fade-in { animation: fade-in .3s ease; }
   @keyframes fade-in { from { opacity: 0; transform: translateY(-10px);} to { opacity: 1; transform: none; } }
+  .card {
+    @apply bg-[#181f29] rounded-2xl shadow-lg p-6;
+  }
+  .card-hover:hover {
+    @apply shadow-2xl scale-[1.02] transition-all duration-200;
+  }
+  .nav-btn {
+    @apply px-3 py-1 rounded-lg font-bold text-base hover:bg-[#232b36] transition;
+  }
+  .nav-btn-active {
+    @apply text-cyan-400 border-b-2 border-cyan-400;
+  }
+  .banner {
+    @apply w-full rounded-2xl shadow-xl mb-8 overflow-hidden flex items-center justify-center bg-gradient-to-br from-[#1a2230] to-[#232b36];
+    min-height: 220px;
+  }
+  .banner-img {
+    @apply w-full h-[220px] object-cover object-center opacity-80;
+  }
+  .banner-title {
+    @apply absolute text-3xl sm:text-4xl font-bold text-white drop-shadow-lg;
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+  }
 }

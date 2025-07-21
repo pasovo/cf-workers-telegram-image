@@ -305,314 +305,338 @@ function AppContent() {
   React.useEffect(() => { if (tab === 'settings') fetchSettings(); }, [tab]);
 
   return (
-    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-4xl">
-      <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
-      {/* 顶部Tabs */}
-      <div className="flex gap-4 mb-6 border-b pb-2">
-        <button className={tab==='upload'?"font-bold text-blue-600 border-b-2 border-blue-600 px-2 py-1":"px-2 py-1"} onClick={()=>setTab('upload')}>上传</button>
-        <button className={tab==='gallery'?"font-bold text-blue-600 border-b-2 border-blue-600 px-2 py-1":"px-2 py-1"} onClick={()=>setTab('gallery')}>图库</button>
-        <button className={tab==='logs'?"font-bold text-blue-600 border-b-2 border-blue-600 px-2 py-1":"px-2 py-1"} onClick={()=>setTab('logs')}>日志</button>
-        <button className={tab==='settings'?"font-bold text-blue-600 border-b-2 border-blue-600 px-2 py-1":"px-2 py-1"} onClick={()=>setTab('settings')}>设置</button>
+    <div className="min-h-screen bg-[#10151b]">
+      {/* 顶部导航栏 */}
+      <nav className="w-full flex items-center justify-between px-6 py-3 bg-[#181f29] shadow-lg sticky top-0 z-40">
+        <div className="flex items-center gap-2">
+          <span className="text-cyan-400 font-bold text-xl tracking-wider flex items-center gap-2">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#22d3ee" strokeWidth="2"/><path d="M8 12l2.5 2.5L16 9" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            sasovo
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <button className={tab==='upload' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('upload')}>上传</button>
+          <button className={tab==='gallery' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('gallery')}>图库</button>
+          <button className={tab==='logs' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('logs')}>日志</button>
+          <button className={tab==='settings' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('settings')}>设置</button>
+        </div>
+        <div className="flex items-center gap-2">
+          <input className="bg-[#232b36] rounded px-3 py-1 text-sm text-gray-200 focus:outline-none" placeholder="搜索" style={{width:120}} />
+          <button className="text-gray-400 hover:text-cyan-400"><svg width="20" height="20" fill="none"><circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="2"/><path d="M15 15l-2.5-2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></button>
+        </div>
+      </nav>
+      {/* Banner区块 */}
+      <div className="banner relative mb-8">
+        <img className="banner-img" src="/preview.png" alt="banner" />
+        <div className="banner-title">欢迎使用 Sasovo 图床</div>
       </div>
-      {/* 统计区块，仅在上传/图库页显示 */}
-      {(tab==='upload'||tab==='gallery') && (
-        <div className="flex flex-wrap gap-4 items-center justify-between mb-6">
-          <div className="flex flex-col items-center">
-            <span className="text-lg font-bold">{stats.total}</span>
-            <span className="text-xs text-gray-500">上传总数</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <span className="text-lg font-bold">{(stats.size / 1024 / 1024).toFixed(2)} MB</span>
-            <span className="text-xs text-gray-500">空间占用</span>
-          </div>
-        </div>
-      )}
-      {/* 日志弹窗改为Tab内容 */}
-      {tab==='logs' && (
-        <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 mx-auto">
-          <h2 className="text-lg font-bold mb-4">使用日志</h2>
-          {logsLoading ? <div className="text-center py-8">加载中...</div> : (
-            <div className="overflow-x-auto max-h-[60vh]">
-              <table className="min-w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="px-2 py-1">时间</th>
-                    <th className="px-2 py-1">类型</th>
-                    <th className="px-2 py-1">file_id</th>
-                    <th className="px-2 py-1">IP</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map(log => (
-                    <tr key={log.id} className="border-b">
-                      <td className="px-2 py-1 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
-                      <td className="px-2 py-1">{log.type}</td>
-                      <td className="px-2 py-1 break-all max-w-[120px]">{log.file_id}</td>
-                      <td className="px-2 py-1">{log.ip}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex justify-between items-center mt-2">
-                <button className="px-2 py-1 bg-gray-200 rounded" disabled={logsPage === 1} onClick={() => fetchLogs(logsPage - 1)}>上一页</button>
-                <span>第 {logsPage} 页</span>
-                <button className="px-2 py-1 bg-gray-200 rounded" disabled={logs.length < 20} onClick={() => fetchLogs(logsPage + 1)}>下一页</button>
-              </div>
+      <div className="container mx-auto max-w-4xl px-2 sm:px-4">
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
+        {/* 统计区块，仅在上传/图库页显示 */}
+        {(tab==='upload'||tab==='gallery') && (
+          <div className="flex gap-8 mb-6">
+            <div className="card flex-1 flex flex-col items-center">
+              <span className="text-2xl font-bold text-cyan-400">{stats.total}</span>
+              <span className="text-xs text-gray-400 mt-1">上传总数</span>
             </div>
-          )}
-        </div>
-      )}
-      {/* 设置Tab内容 */}
-      {tab==='settings' && (
-        <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 mx-auto">
-          <h2 className="text-lg font-bold mb-4">系统设置</h2>
-          {settings ? (
-            <ul className="text-sm text-gray-700 space-y-2">
-              <li><b>短链域名：</b>{settings.domain}</li>
-              <li><b>Telegram Chat ID：</b>{settings.chat_id}</li>
-              <li><b>图片总数：</b>{settings.total}</li>
-              <li><b>空间占用：</b>{(settings.size/1024/1024).toFixed(2)} MB</li>
-            </ul>
-          ) : <div>加载中...</div>}
-        </div>
-      )}
-      {/* 上传Tab内容 */}
-      {tab==='upload' && (
-        <div
-          ref={dropRef}
-          className="max-w-md mx-auto bg-white rounded-lg shadow-md p-4 sm:p-6 border-2 border-dashed border-gray-300 hover:border-blue-400 transition"
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          style={{ minHeight: 180 }}
-        >
-          <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
-            {/* 拖拽/粘贴/多选上传区域 */}
-            <div className="space-y-2 flex flex-col items-center">
-              <label
-                htmlFor="photo"
-                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition duration-300 flex items-center justify-center cursor-pointer"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                </svg>
-                选择图片（可多选/拖拽/粘贴）
-                <input
-                  type="file"
-                  id="photo"
-                  name="photo"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileChange}
-                  ref={fileInputRef}
-                />
-              </label>
-              {files.length > 0 && (
-                <div className="w-full flex flex-wrap gap-2 mt-2">
-                  {files.map((file, idx) => (
-                    <div key={idx} className="flex flex-col items-center border rounded p-2 bg-gray-50">
-                      <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" />
-                      <span className="text-xs break-all max-w-[80px]">{file.name}</span>
+            <div className="card flex-1 flex flex-col items-center">
+              <span className="text-2xl font-bold text-cyan-400">{(stats.size / 1024 / 1024).toFixed(2)} MB</span>
+              <span className="text-xs text-gray-400 mt-1">空间占用</span>
+            </div>
+          </div>
+        )}
+        {/* 其余Tab内容卡片化 */}
+        {tab==='upload' && (
+          <div className="card card-hover mb-8">
+            <div
+              ref={dropRef}
+              className="max-w-md mx-auto bg-white rounded-lg shadow-md p-4 sm:p-6 border-2 border-dashed border-gray-300 hover:border-blue-400 transition"
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              style={{ minHeight: 180 }}
+            >
+              <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
+                {/* 拖拽/粘贴/多选上传区域 */}
+                <div className="space-y-2 flex flex-col items-center">
+                  <label
+                    htmlFor="photo"
+                    className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition duration-300 flex items-center justify-center cursor-pointer"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                    </svg>
+                    选择图片（可多选/拖拽/粘贴）
+                    <input
+                      type="file"
+                      id="photo"
+                      name="photo"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileChange}
+                      ref={fileInputRef}
+                    />
+                  </label>
+                  {files.length > 0 && (
+                    <div className="w-full flex flex-wrap gap-2 mt-2">
+                      {files.map((file, idx) => (
+                        <div key={idx} className="flex flex-col items-center border rounded p-2 bg-gray-50">
+                          <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" />
+                          <span className="text-xs break-all max-w-[80px]">{file.name}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                </div>
+                {/* 压缩选项 */}
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="compress" checked={compress} onChange={e => setCompress(e.target.checked)} />
+                  <label htmlFor="compress" className="text-sm text-gray-700">上传前压缩图片</label>
+                </div>
+                {/* 标签输入 */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700">标签：</label>
+                  <input
+                    className="border rounded px-2 py-1 flex-1"
+                    type="text"
+                    name="tags"
+                    placeholder="多个标签用逗号分隔"
+                    value={tags}
+                    onChange={e => setTags(e.target.value)}
+                  />
+                </div>
+                {/* 文件名输入 */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700">文件名：</label>
+                  <input
+                    className="border rounded px-2 py-1 flex-1"
+                    type="text"
+                    name="filename"
+                    placeholder="自定义文件名"
+                    value={filename}
+                    onChange={e => setFilename(sanitizeFilename(e.target.value))}
+                    maxLength={64}
+                  />
+                  <span className="text-xs text-gray-400">仅字母数字._-</span>
+                </div>
+                {/* 有效期选择 */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700">有效期：</label>
+                  <select
+                    className="border rounded px-2 py-1"
+                    value={expire}
+                    onChange={e => setExpire(e.target.value)}
+                    name="expire"
+                  >
+                    <option value="forever">永久</option>
+                    <option value="1">1天</option>
+                    <option value="7">7天</option>
+                    <option value="30">30天</option>
+                  </select>
+                </div>
+                {/* 上传进度条 */}
+                {pending && (
+                  <div className="w-full h-3 bg-gray-200 rounded overflow-hidden animate-pulse">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                    disabled={pending || files.length === 0}
+                  >
+                    {pending ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                        批量上传中...
+                      </span>
+                    ) : '批量上传'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {tab==='gallery' && (
+          <div className="card card-hover mb-8">
+            <div className="mt-8 sm:mt-12 max-w-3xl mx-auto">
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4">上传历史记录</h2>
+              {/* 筛选栏 */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <input
+                  type="text"
+                  placeholder="标签筛选"
+                  className="border rounded px-2 py-1"
+                  value={tagFilter}
+                  onChange={e => setTagFilter(e.target.value)}
+                  style={{ width: 120 }}
+                />
+                <input
+                  type="text"
+                  placeholder="文件名筛选"
+                  className="border rounded px-2 py-1"
+                  value={filenameFilter}
+                  onChange={e => setFilenameFilter(e.target.value)}
+                  style={{ width: 120 }}
+                />
+                <input
+                  type="text"
+                  placeholder="搜索 file_id 或 chat_id"
+                  className="border rounded px-2 py-1"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  style={{ width: 180 }}
+                />
+                <button
+                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                  onClick={handleSearch}
+                  type="button"
+                >
+                  搜索
+                </button>
+              </div>
+              {/* 批量操作栏 */}
+              <div className="flex items-center gap-2 mb-2">
+                <input type="checkbox" checked={selected.length === history.length && history.length > 0} onChange={e => handleSelectAll(e.target.checked)} />
+                <span className="text-sm">全选</span>
+                <button className="px-2 py-1 bg-red-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
+                <button className="px-2 py-1 bg-green-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchExport}>导出JSON</button>
+              </div>
+              {/* 分页按钮 */}
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                  onClick={handlePrevPage}
+                  disabled={page === 1 || loading}
+                >上一页</button>
+                <span>第 {pagination.page} 页</span>
+                <button
+                  className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                  onClick={handleNextPage}
+                  disabled={history.length < limit || loading}
+                >下一页</button>
+              </div>
+              {loading ? (
+                <p className="text-gray-500 text-center py-6">加载中...</p>
+              ) : history.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10">
+                  <svg className="w-16 h-16 text-gray-300 mb-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <p className="text-gray-500 text-center">暂无上传记录</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {history.map(item => {
+                    const shortUrl = `${SHORTLINK_DOMAIN || window.location.origin}/img/${item.short_code || ''}`;
+                    const md = `![](${shortUrl})`;
+                    const html = `<img src=\"${shortUrl}\" />`;
+                    const isChecked = selected.includes(item.file_id);
+                    const isShowOriginal = showOriginal[item.file_id];
+                    return (
+                      <div key={item.id} className="border rounded-lg p-4 flex flex-col gap-2 hover:shadow-md transition-shadow bg-white">
+                        <div className="flex items-center gap-3">
+                          <input type="checkbox" checked={isChecked} onChange={e => handleSelect(item.file_id, e.target.checked)} />
+                          <img 
+                            src={`/api/get_photo/${item.file_id}${isShowOriginal ? '' : '?thumb=1'}`}
+                            alt="History preview" 
+                            className="w-20 h-20 object-cover rounded cursor-pointer"
+                            onClick={() => handleToggleImage(item.file_id)}
+                            onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/100?text=加载失败'}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate max-w-[200px]">{item.file_id}</p>
+                            <p className="text-xs text-gray-500">{new Date(item.created_at).toLocaleString()}</p>
+                            {item.filename && <p className="text-xs text-blue-600">文件名: {item.filename}</p>}
+                            {item.tags && <p className="text-xs text-green-600">标签: {item.tags}</p>}
+                            <button className="text-xs text-blue-500 underline mt-1" onClick={() => handleToggleImage(item.file_id)} type="button">
+                              {isShowOriginal ? '查看缩略图' : '查看原图'}
+                            </button>
+                          </div>
+                        </div>
+                        {/* 短链展示与复制 */}
+                        {item.short_code && (
+                          <div className="mt-2 flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">短链：</span>
+                              <a href={shortUrl} target="_blank" rel="noopener" className="text-blue-600 underline break-all">{shortUrl}</a>
+                              <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(shortUrl)} type="button">复制</button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">Markdown：</span>
+                              <input className="border px-1 py-0.5 text-xs w-36" value={md} readOnly />
+                              <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(md)} type="button">复制</button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">HTML：</span>
+                              <input className="border px-1 py-0.5 text-xs w-36" value={html} readOnly />
+                              <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(html)} type="button">复制</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
-            {/* 压缩选项 */}
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="compress" checked={compress} onChange={e => setCompress(e.target.checked)} />
-              <label htmlFor="compress" className="text-sm text-gray-700">上传前压缩图片</label>
-            </div>
-            {/* 标签输入 */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-700">标签：</label>
-              <input
-                className="border rounded px-2 py-1 flex-1"
-                type="text"
-                name="tags"
-                placeholder="多个标签用逗号分隔"
-                value={tags}
-                onChange={e => setTags(e.target.value)}
-              />
-            </div>
-            {/* 文件名输入 */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-700">文件名：</label>
-              <input
-                className="border rounded px-2 py-1 flex-1"
-                type="text"
-                name="filename"
-                placeholder="自定义文件名"
-                value={filename}
-                onChange={e => setFilename(sanitizeFilename(e.target.value))}
-                maxLength={64}
-              />
-              <span className="text-xs text-gray-400">仅字母数字._-</span>
-            </div>
-            {/* 有效期选择 */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-700">有效期：</label>
-              <select
-                className="border rounded px-2 py-1"
-                value={expire}
-                onChange={e => setExpire(e.target.value)}
-                name="expire"
-              >
-                <option value="forever">永久</option>
-                <option value="1">1天</option>
-                <option value="7">7天</option>
-                <option value="30">30天</option>
-              </select>
-            </div>
-            {/* 上传进度条 */}
-            {pending && (
-              <div className="w-full h-3 bg-gray-200 rounded overflow-hidden animate-pulse">
-                <div
-                  className="h-full bg-blue-500 transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-            )}
-            <div className="pt-2">
-              <button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
-                disabled={pending || files.length === 0}
-              >
-                {pending ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                    批量上传中...
-                  </span>
-                ) : '批量上传'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-      {/* 图库Tab内容 */}
-      {tab==='gallery' && (
-        <div className="mt-8 sm:mt-12 max-w-3xl mx-auto">
-          <h2 className="text-xl sm:text-2xl font-semibold mb-4">上传历史记录</h2>
-          {/* 筛选栏 */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            <input
-              type="text"
-              placeholder="标签筛选"
-              className="border rounded px-2 py-1"
-              value={tagFilter}
-              onChange={e => setTagFilter(e.target.value)}
-              style={{ width: 120 }}
-            />
-            <input
-              type="text"
-              placeholder="文件名筛选"
-              className="border rounded px-2 py-1"
-              value={filenameFilter}
-              onChange={e => setFilenameFilter(e.target.value)}
-              style={{ width: 120 }}
-            />
-            <input
-              type="text"
-              placeholder="搜索 file_id 或 chat_id"
-              className="border rounded px-2 py-1"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              style={{ width: 180 }}
-            />
-            <button
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-              onClick={handleSearch}
-              type="button"
-            >
-              搜索
-            </button>
           </div>
-          {/* 批量操作栏 */}
-          <div className="flex items-center gap-2 mb-2">
-            <input type="checkbox" checked={selected.length === history.length && history.length > 0} onChange={e => handleSelectAll(e.target.checked)} />
-            <span className="text-sm">全选</span>
-            <button className="px-2 py-1 bg-red-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
-            <button className="px-2 py-1 bg-green-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchExport}>导出JSON</button>
-          </div>
-          {/* 分页按钮 */}
-          <div className="flex items-center justify-between mb-2">
-            <button
-              className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              onClick={handlePrevPage}
-              disabled={page === 1 || loading}
-            >上一页</button>
-            <span>第 {pagination.page} 页</span>
-            <button
-              className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              onClick={handleNextPage}
-              disabled={history.length < limit || loading}
-            >下一页</button>
-          </div>
-          {loading ? (
-            <p className="text-gray-500 text-center py-6">加载中...</p>
-          ) : history.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10">
-              <svg className="w-16 h-16 text-gray-300 mb-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              <p className="text-gray-500 text-center">暂无上传记录</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {history.map(item => {
-                const shortUrl = `${SHORTLINK_DOMAIN || window.location.origin}/img/${item.short_code || ''}`;
-                const md = `![](${shortUrl})`;
-                const html = `<img src=\"${shortUrl}\" />`;
-                const isChecked = selected.includes(item.file_id);
-                const isShowOriginal = showOriginal[item.file_id];
-                return (
-                  <div key={item.id} className="border rounded-lg p-4 flex flex-col gap-2 hover:shadow-md transition-shadow bg-white">
-                    <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={isChecked} onChange={e => handleSelect(item.file_id, e.target.checked)} />
-                      <img 
-                        src={`/api/get_photo/${item.file_id}${isShowOriginal ? '' : '?thumb=1'}`}
-                        alt="History preview" 
-                        className="w-20 h-20 object-cover rounded cursor-pointer"
-                        onClick={() => handleToggleImage(item.file_id)}
-                        onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/100?text=加载失败'}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate max-w-[200px]">{item.file_id}</p>
-                        <p className="text-xs text-gray-500">{new Date(item.created_at).toLocaleString()}</p>
-                        {item.filename && <p className="text-xs text-blue-600">文件名: {item.filename}</p>}
-                        {item.tags && <p className="text-xs text-green-600">标签: {item.tags}</p>}
-                        <button className="text-xs text-blue-500 underline mt-1" onClick={() => handleToggleImage(item.file_id)} type="button">
-                          {isShowOriginal ? '查看缩略图' : '查看原图'}
-                        </button>
-                      </div>
-                    </div>
-                    {/* 短链展示与复制 */}
-                    {item.short_code && (
-                      <div className="mt-2 flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">短链：</span>
-                          <a href={shortUrl} target="_blank" rel="noopener" className="text-blue-600 underline break-all">{shortUrl}</a>
-                          <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(shortUrl)} type="button">复制</button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Markdown：</span>
-                          <input className="border px-1 py-0.5 text-xs w-36" value={md} readOnly />
-                          <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(md)} type="button">复制</button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">HTML：</span>
-                          <input className="border px-1 py-0.5 text-xs w-36" value={html} readOnly />
-                          <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(html)} type="button">复制</button>
-                        </div>
-                      </div>
-                    )}
+        )}
+        {tab==='logs' && (
+          <div className="card card-hover mb-8">
+            <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 mx-auto">
+              <h2 className="text-lg font-bold mb-4">使用日志</h2>
+              {logsLoading ? <div className="text-center py-8">加载中...</div> : (
+                <div className="overflow-x-auto max-h-[60vh]">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="px-2 py-1">时间</th>
+                        <th className="px-2 py-1">类型</th>
+                        <th className="px-2 py-1">file_id</th>
+                        <th className="px-2 py-1">IP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {logs.map(log => (
+                        <tr key={log.id} className="border-b">
+                          <td className="px-2 py-1 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
+                          <td className="px-2 py-1">{log.type}</td>
+                          <td className="px-2 py-1 break-all max-w-[120px]">{log.file_id}</td>
+                          <td className="px-2 py-1">{log.ip}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="flex justify-between items-center mt-2">
+                    <button className="px-2 py-1 bg-gray-200 rounded" disabled={logsPage === 1} onClick={() => fetchLogs(logsPage - 1)}>上一页</button>
+                    <span>第 {logsPage} 页</span>
+                    <button className="px-2 py-1 bg-gray-200 rounded" disabled={logs.length < 20} onClick={() => fetchLogs(logsPage + 1)}>下一页</button>
                   </div>
-                );
-              })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+        {tab==='settings' && (
+          <div className="card card-hover mb-8">
+            <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 mx-auto">
+              <h2 className="text-lg font-bold mb-4">系统设置</h2>
+              {settings ? (
+                <ul className="text-sm text-gray-700 space-y-2">
+                  <li><b>短链域名：</b>{settings.domain}</li>
+                  <li><b>Telegram Chat ID：</b>{settings.chat_id}</li>
+                  <li><b>图片总数：</b>{settings.total}</li>
+                  <li><b>空间占用：</b>{(settings.size/1024/1024).toFixed(2)} MB</li>
+                </ul>
+              ) : <div>加载中...</div>}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 # Sasovo Cloudflare Workers 图床
 
-> 基于 Cloudflare Workers + Telegram Bot 的免费图片直链/图床系统，支持多文件上传、批量管理、标签分类、访问统计、日志审计、现代美观 UI。
+> 基于 Cloudflare Workers + Telegram Bot 的免费图片直链/图床系统，支持多文件上传、批量管理、标签分类、现代美观 UI。
 [感谢原项目,根据此项目修改而来](https://github.com/houhoz/cf-workers-telegram-image)
+
 ![screenshot](./preview.png)
 
 ---
@@ -12,10 +13,9 @@
 - **永久直链**：图片直链可用于 Markdown/HTML/外链
 - **标签分类**：支持标签管理与筛选
 - **批量操作**：批量删除、导出历史记录
-- **访问统计**：总上传数、空间占用实时统计
-- **日志审计**：上传/访问日志分页查看
 - **现代 UI**：深色主题、卡片风格、响应式设计
 - **Cloudflare D1**：数据安全、全球加速、免费额度
+- **自定义页面标题/网站图标**：支持在设置页自定义网站标题和 favicon
 
 ---
 
@@ -28,21 +28,13 @@
    - 在 wrangler.json 中配置 `TG_BOT_TOKEN`、`TG_CHAT_ID`，可选 `SHORTLINK_DOMAIN`
 
 3. **初始化数据库**
-   - 执行 schema.sql 创建/升级 images、logs 表：
+   - 执行 schema.sql 创建/升级 images 表：
      ```sql
      -- images 表升级
      ALTER TABLE images ADD COLUMN tags TEXT;
      ALTER TABLE images ADD COLUMN filename TEXT;
      ALTER TABLE images ADD COLUMN size INTEGER;
      ALTER TABLE images ADD COLUMN visit_count INTEGER DEFAULT 0;
-     -- logs 表
-     CREATE TABLE IF NOT EXISTS logs (
-       id INTEGER PRIMARY KEY AUTOINCREMENT,
-       file_id TEXT,
-       type TEXT,
-       ip TEXT,
-       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-     );
      ```
 
 4. **部署到 Cloudflare Workers**
@@ -81,13 +73,6 @@ ALTER TABLE images ADD COLUMN tags TEXT;
 ALTER TABLE images ADD COLUMN filename TEXT;
 ALTER TABLE images ADD COLUMN size INTEGER;
 ALTER TABLE images ADD COLUMN visit_count INTEGER DEFAULT 0;
-CREATE TABLE IF NOT EXISTS logs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  file_id TEXT,
-  type TEXT,
-  ip TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 ```
 
 ---
@@ -96,10 +81,10 @@ CREATE TABLE IF NOT EXISTS logs (
 
 - **图片直链无法访问？**
   - 检查 wrangler.json 不要配置 assets，所有路由交给 Worker 处理
-- **上传/删除后统计不刷新？**
-  - 已自动刷新，如有缓存请清理浏览器缓存
 - **数据库表结构不对？**
   - 参考上方“数据库升级说明”手动执行 SQL
+- **如何自定义页面标题/网站图标？**
+  - 进入“设置”页面，输入标题或上传 favicon 并保存即可，支持本地持久化
 
 ---
 

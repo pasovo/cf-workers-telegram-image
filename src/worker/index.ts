@@ -104,9 +104,7 @@ app.post('/api/upload', async (c) => {
         if (!dbResult.success) {
             throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
         }
-        // 写上传日志
-        await DB.prepare('INSERT INTO logs (file_id, type, ip) VALUES (?, ?, ?)')
-          .bind(file_id, 'upload', c.req.header('cf-connecting-ip') || '').run();
+        // 删除上传、访问等日志写入
       } catch (dbError) {
         console.error('数据库插入错误:', dbError);
         return c.json({
@@ -189,9 +187,7 @@ app.get('/img/:short_code', async (c) => {
   }
   // 访问计数+1
   await DB.prepare('UPDATE images SET visit_count = visit_count + 1 WHERE short_code = ?').bind(short_code).run();
-  // 写访问日志
-  await DB.prepare('INSERT INTO logs (file_id, type, ip) VALUES (?, ?, ?)')
-    .bind(row.file_id, 'visit', c.req.header('cf-connecting-ip') || '').run();
+  // 删除访问日志
   // 返回原图
   const TG_BOT_TOKEN = c.env.TG_BOT_TOKEN;
   const getFileResponse = await fetch(
@@ -269,21 +265,6 @@ app.get('/api/stats', async (c) => {
     hot: hot?.results || []
   });
 });
-// 日志API
-app.get('/api/logs', async (c) => {
-  const { DB } = c.env;
-  const { page = '1', limit = '20' } = c.req.query();
-  const pageNum = parseInt(page, 10) || 1;
-  const limitNum = parseInt(limit, 10) || 20;
-  const offset = (pageNum - 1) * limitNum;
-  const { results } = await DB.prepare('SELECT * FROM logs ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(limitNum, offset).all();
-  return c.json({
-    status: 'success',
-    data: results,
-    pagination: { page: pageNum, limit: limitNum, total: results.length }
-  });
-});
-
 // 设置API
 app.get('/api/settings', async (c) => {
   const DB = c.env.DB;

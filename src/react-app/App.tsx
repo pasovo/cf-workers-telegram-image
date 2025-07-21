@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 // 全局弹窗组件
 function Toast({ message, type = 'info', onClose }: { message: string; type?: 'info' | 'error' | 'success'; onClose: () => void }) {
@@ -39,11 +39,8 @@ function AppContent() {
   const [files, setFiles] = useState<File[]>([]); // 多文件队列
   const [compress, setCompress] = useState(false); // 是否压缩
   const [stats, setStats] = useState<{ total: number; size: number; hot: any[] }>({ total: 0, size: 0, hot: [] });
-  const [logs, setLogs] = useState<any[]>([]);
-  const [logsPage, setLogsPage] = useState(1);
-  const [logsLoading, setLogsLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  type TabType = 'upload' | 'gallery' | 'logs' | 'settings';
+  type TabType = 'upload' | 'gallery' | 'settings';
   const [tab, setTab] = useState<TabType>('upload');
   const [lastTab, setLastTab] = useState<TabType>(tab);
   const [fade, setFade] = useState(true);
@@ -61,6 +58,12 @@ function AppContent() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTag, setNewTag] = useState('');
+
+  // 页面标题和网站图标设置
+  const [pageTitle, setPageTitle] = useState<string>(() => localStorage.getItem('pageTitle') || '图床');
+  const [faviconUrl, setFaviconUrl] = useState<string>(() => localStorage.getItem('faviconUrl') || '/favicon.ico');
+  const [titleInput, setTitleInput] = useState(pageTitle);
+  const [faviconFile, setFaviconFile] = useState<File|null>(null);
 
   const handleToggleTag = (tag: string) => {
     setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
@@ -86,6 +89,20 @@ function AppContent() {
       return () => clearTimeout(t);
     }
   }, [tab]);
+
+  // 页面标题和favicon同步
+  useEffect(() => {
+    document.title = pageTitle || '图床';
+    if (faviconUrl) {
+      let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = faviconUrl;
+    }
+  }, [pageTitle, faviconUrl]);
 
   // 文件名过滤
   const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '', tagVal = '', filenameVal = '') => {
@@ -319,20 +336,6 @@ function AppContent() {
   };
   React.useEffect(() => { fetchStats(); }, []);
 
-  // 获取日志
-  const fetchLogs = async (page = 1) => {
-    setLogsLoading(true);
-    try {
-      const res = await fetch(`/api/logs?page=${page}&limit=20`);
-      const data = await res.json();
-      if (data.status === 'success') {
-        setLogs(data.data);
-        setLogsPage(page);
-      }
-    } catch {}
-    setLogsLoading(false);
-  };
-
   // 获取设置
   const fetchSettings = async () => {
     try {
@@ -373,7 +376,6 @@ function AppContent() {
         <div className="flex gap-2">
           <button className={tab==='upload' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('upload')}>上传</button>
           <button className={tab==='gallery' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('gallery')}>图库</button>
-          <button className={tab==='logs' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('logs')}>日志</button>
           <button className={tab==='settings' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('settings')}>设置</button>
         </div>
       </nav>
@@ -594,42 +596,6 @@ function AppContent() {
               </div>
             </div>
           )}
-          {tab==='logs' && (
-            <div className="card card-hover mb-8">
-              <div className="max-w-2xl w-full p-6 mx-auto">
-                <h2 className="text-lg font-bold mb-4 text-cyan-400">使用日志</h2>
-                {logsLoading ? <div className="text-center py-8 text-gray-400">加载中...</div> : (
-                  <div className="overflow-x-auto max-h-[60vh]">
-                    <table className="min-w-full text-xs text-gray-100">
-                      <thead>
-                        <tr className="bg-[#232b36] text-gray-400">
-                          <th className="px-2 py-1">时间</th>
-                          <th className="px-2 py-1">类型</th>
-                          <th className="px-2 py-1">file_id</th>
-                          <th className="px-2 py-1">IP</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {logs.map(log => (
-                          <tr key={log.id} className="border-b border-[#232b36]">
-                            <td className="px-2 py-1 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
-                            <td className="px-2 py-1">{log.type}</td>
-                            <td className="px-2 py-1 break-all max-w-[120px]">{log.file_id}</td>
-                            <td className="px-2 py-1">{log.ip}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="flex justify-between items-center mt-2">
-                      <button className="px-2 py-1 bg-[#232b36] text-gray-200 rounded" disabled={logsPage === 1} onClick={() => fetchLogs(logsPage - 1)}>上一页</button>
-                      <span className="text-gray-400">第 {logsPage} 页</span>
-                      <button className="px-2 py-1 bg-[#232b36] text-gray-200 rounded" disabled={logs.length < 20} onClick={() => fetchLogs(logsPage + 1)}>下一页</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
           {tab==='settings' && (
             <div className="card card-hover mb-8 flex justify-center">
               <div className="max-w-md w-full p-6 mx-auto">
@@ -638,10 +604,49 @@ function AppContent() {
                   <ul className="text-sm text-gray-100 space-y-2">
                     {/* <li><b>短链域名：</b>{settings.domain}</li> */}
                     {/* <li><b>Telegram Chat ID：</b>{settings.chat_id}</li> */}
-                    <li><b>页面标题：</b>（可自定义输入）</li>
-                    <li><b>网站图标：</b>（可上传favicon.ico，建议尺寸32x32）</li>
-                    <li><b>图片总数：</b>{settings.total}</li>
-                    <li><b>空间占用：</b>{(settings.size/1024/1024).toFixed(2)} MB</li>
+                    <li className="flex items-center gap-2"><b>页面标题：</b>
+                      <input
+                        className="border rounded px-2 py-1 bg-[#232b36] text-gray-100"
+                        style={{width:180}}
+                        value={titleInput}
+                        onChange={e => setTitleInput(e.target.value)}
+                        placeholder="图床"
+                      />
+                      <button
+                        className="ml-2 px-2 py-1 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                        onClick={() => {
+                          setPageTitle(titleInput.trim() || '图床');
+                          localStorage.setItem('pageTitle', titleInput.trim() || '图床');
+                        }}
+                        type="button"
+                      >保存</button>
+                    </li>
+                    <li className="flex items-center gap-2"><b>网站图标：</b>
+                      <input
+                        type="file"
+                        accept="image/x-icon,.ico"
+                        onChange={e => setFaviconFile(e.target.files?.[0] || null)}
+                        className="text-xs"
+                      />
+                      <button
+                        className="ml-2 px-2 py-1 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                        onClick={async () => {
+                          if (faviconFile) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              if (typeof reader.result === 'string') {
+                                setFaviconUrl(reader.result);
+                                localStorage.setItem('faviconUrl', reader.result);
+                              }
+                            };
+                            reader.readAsDataURL(faviconFile);
+                          }
+                        }}
+                        type="button"
+                        disabled={!faviconFile}
+                      >保存</button>
+                      <img src={faviconUrl} alt="favicon" className="ml-2 w-6 h-6 inline-block align-middle rounded" />
+                    </li>
                   </ul>
                 ) : <div className="text-gray-400">加载中...</div>}
               </div>

@@ -36,9 +36,21 @@
   .fade-content {
     @apply transition-opacity duration-300;
     opacity: 1;
+    transition-property: opacity, transform;
+    transform: translateY(0);
   }
   .fade-content-leave {
     opacity: 0;
+    transform: translateY(30px);
+  }
+  .fade-content-enter {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  .fade-content-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.3s, transform 0.3s;
   }
   .banner {
     @apply w-full rounded-2xl shadow-xl mb-8 overflow-hidden flex items-center justify-center bg-gradient-to-br from-[#1a2230] to-[#232b36];

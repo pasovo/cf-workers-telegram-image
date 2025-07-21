@@ -44,6 +44,7 @@ function AppContent() {
   const [tab, setTab] = useState<TabType>('upload');
   const [lastTab, setLastTab] = useState<TabType>(tab);
   const [fade, setFade] = useState(true);
+  const [enter, setEnter] = useState(false);
   const [settings, setSettings] = useState<any>(null);
   // 瀑布流弹窗相关
   const [modalOpen, setModalOpen] = useState(false);
@@ -83,10 +84,12 @@ function AppContent() {
   React.useEffect(() => {
     if (tab !== lastTab) {
       setFade(false);
+      setEnter(true);
       const t = setTimeout(() => {
         setLastTab(tab);
         setFade(true);
-      }, 200);
+        setEnter(false);
+      }, 300);
       return () => clearTimeout(t);
     }
   }, [tab]);
@@ -129,9 +132,14 @@ function AppContent() {
           .flat();
         const uniqueTags = Array.from(new Set(allTags)) as string[];
         setTagOptions(uniqueTags.length > 0 ? uniqueTags : ['默认']);
+      } else {
+        setToast({ message: data.message || '加载历史记录失败', type: 'error' });
       }
     } catch (error) {
-      setToast({ message: '加载历史记录失败，请刷新页面重试', type: 'error' });
+      // 仅当明确不是“无数据”时才提示
+      if (error instanceof Error && !/no such table|not found|not exist|not found/i.test(error.message)) {
+        setToast({ message: '加载历史记录失败，请刷新页面重试', type: 'error' });
+      }
     } finally {
       setLoading(false);
     }
@@ -290,6 +298,13 @@ function AppContent() {
   const handleBatchDelete = async () => {
     if (selected.length === 0) return;
     if (!window.confirm('确定要删除选中的图片记录吗？')) return;
+    // 记录当前被选中的图片
+    const removed = history.filter(item => selected.includes(item.file_id));
+    // 立即前端移除
+    setHistory(prev => prev.filter(item => !selected.includes(item.file_id)));
+    setSelected([]);
+    setToast({ message: '已提交删除', type: 'info' });
+    // 后台异步删除
     try {
       const res = await fetch('/api/delete', {
         method: 'POST',
@@ -299,13 +314,14 @@ function AppContent() {
       const data = await res.json();
       if (data.status === 'success') {
         setToast({ message: '删除成功', type: 'success' });
-        setSelected([]);
-        fetchHistory(page, limit, search, tagFilter, filenameFilter);
         fetchStats(); // 删除后刷新统计
       } else {
-        setToast({ message: '删除失败', type: 'error' });
+        // 回滚
+        setHistory(prev => [...removed, ...prev]);
+        setToast({ message: '删除失败，请重试', type: 'error' });
       }
     } catch {
+      setHistory(prev => [...removed, ...prev]);
       setToast({ message: '删除失败', type: 'error' });
     }
   };
@@ -400,7 +416,7 @@ function AppContent() {
           </div>
         )}
         {/* 其余Tab内容卡片化 */}
-        <div className={`fade-content${fade ? '' : ' fade-content-leave'}`} key={tab}>
+        <div className={`fade-content${fade ? '' : ' fade-content-leave'}${enter ? ' fade-content-enter' : ''}${fade && !enter ? ' fade-content-enter-active' : ''}`} key={tab}>
           {tab==='upload' && (
             <div
               className={`card card-hover mb-8 transition-all duration-200 ${dragActive ? 'ring-4 ring-cyan-400 shadow-2xl' : ''}`}
@@ -596,22 +612,18 @@ function AppContent() {
                   <div className="w-full grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 max-w-6xl mx-auto">
                     {history.map(item => (
                       <div key={item.id} className="relative group">
-                        {selectMode && (
-                          <input
-                            type="checkbox"
-                            checked={selected.includes(item.file_id)}
-                            onChange={e => {
-                              if (e.target.checked) setSelected(prev => [...prev, item.file_id]);
-                              else setSelected(prev => prev.filter(id => id !== item.file_id));
-                            }}
-                            className="absolute top-2 left-2 z-10 w-5 h-5 accent-cyan-500 bg-[#232b36] border border-cyan-400 rounded shadow"
-                          />
-                        )}
                         <img
                           src={`/api/get_photo/${item.file_id}?thumb=1`}
                           alt={item.file_id}
                           className={`w-full object-contain max-h-64 rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36] ${selectMode ? 'opacity-80' : ''}`}
-                          onClick={() => !selectMode && openModal(item)}
+                          onClick={() => {
+                            if (selectMode) {
+                              if (selected.includes(item.file_id)) setSelected(prev => prev.filter(id => id !== item.file_id));
+                              else setSelected(prev => [...prev, item.file_id]);
+                            } else {
+                              openModal(item);
+                            }
+                          }}
                           onError={e => (e.currentTarget.src = 'https://via.placeholder.com/200?text=加载失败')}
                         />
                       </div>

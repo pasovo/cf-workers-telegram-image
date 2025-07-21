@@ -51,8 +51,8 @@ app.post('/api/upload', async (c) => {
   if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
       return c.json({
           status: 'error',
-          message: '环境变量配置不完整',
-          details: 'TG_BOT_TOKEN 和 TG_CHAT_ID 必须配置'
+          message: '\u73af\u5883\u53d8\u91cf\u914d\u7f6e\u4e0d\u5b8c\u6574',
+          details: 'TG_BOT_TOKEN \u548c TG_CHAT_ID \u5fc5\u987b\u914d\u7f6e'
       }, { status: 500 });
   }
 
@@ -63,7 +63,7 @@ app.post('/api/upload', async (c) => {
   if (!photoFile || photoFile.size === 0) {
       return c.json({
           status: 'error',
-          message: '请上传有效的图片文件'
+          message: '\u8bf7\u4e0a\u4f20\u6709\u6548\u7684\u56fe\u7247\u6587\u4ef6'
       }, { status: 400 });
   }
 
@@ -81,9 +81,9 @@ app.post('/api/upload', async (c) => {
       const statusCode = Number(response.status) || 500;
       return c.json({
         status: 'error',
-        message: 'Telegram API调用失败',
+        message: 'Telegram API\u8c03\u7528\u5931\u8d25',
         details: errorDetails
-      }, { status: statusCode });
+      }, { status: 500 });
     }
     const res: {
       ok: boolean;
@@ -108,7 +108,7 @@ app.post('/api/upload', async (c) => {
         console.error('数据库插入错误:', dbError);
         return c.json({
             status: 'error',
-            message: '保存记录失败',
+            message: '\u4fdd\u5b58\u8bb0\u5f55\u5931\u8d25',
             details: dbError instanceof Error ? dbError.message : String(dbError)
         }, { status: 500 });
     }
@@ -119,47 +119,37 @@ app.post('/api/upload', async (c) => {
     }
   } catch (error: unknown) {
     console.error(error);
-    return c.json({ status: 'error', message: '服务器错误' }, 500);
+    return c.json({ status: 'error', message: '\u670d\u52a1\u5668\u9519\u8bef' }, { status: 500 });
   }
 });
 
 // 新增：获取历史记录API
 app.get('/api/history', async (c) => {
   try {
-    // 新增：获取历史记录API
-    app.get('/api/history', async (c) => {
-        try {
-            // 添加分页参数
-            const { page = '1', limit = '20' } = c.req.query();
-            const pageNum = parseInt(page, 10) || 1;
-            const limitNum = parseInt(limit, 10) || 20;
-            const offset = (pageNum - 1) * limitNum;
-    
-            const { results } = await c.env.DB.prepare(
-                'SELECT * FROM images ORDER BY created_at DESC LIMIT ? OFFSET ?'
-            ).bind(limitNum, offset).all();
-    
-            return c.json({
-                status: 'success',
-                data: results,
-                pagination: {
-                    page: pageNum,
-                    limit: limitNum,
-                    total: results.length
-                }
-            });
-        } catch (error) {
-            return c.json({
-                status: 'error',
-                message: error instanceof Error ? error.message : '获取历史记录失败'
-            }, 500);
-        }
+    // 添加分页参数
+    const { page = '1', limit = '20' } = c.req.query();
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 20;
+    const offset = (pageNum - 1) * limitNum;
+
+    const { results } = await c.env.DB.prepare(
+      'SELECT * FROM images ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).bind(limitNum, offset).all();
+
+    return c.json({
+      status: 'success',
+      data: results,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: results.length
+      }
     });
   } catch (error) {
     return c.json({
       status: 'error',
-      message: error instanceof Error ? error.message : '获取历史记录失败'
-    }, 500);
+      message: error instanceof Error ? error.message : '\u83b7\u53d6\u5386\u53f2\u8bb0\u5f55\u5931\u8d25'
+    }, { status: 500 });
   }
 });
 
@@ -174,8 +164,8 @@ app.get('/api/test-db', async (c) => {
   } catch (error) {
     return c.json({
       status: 'error',
-      message: error instanceof Error ? error.message : '数据库操作失败'
-    }, 500);
+      message: error instanceof Error ? error.message : '\u6570\u636e\u5e93\u64cd\u4f5c\u5931\u8d25'
+    }, { status: 500 });
   }
 });
 export default app;

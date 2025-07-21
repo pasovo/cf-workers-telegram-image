@@ -5,6 +5,8 @@ type Bindings = {
   TG_BOT_TOKEN: string;
   TG_CHAT_ID: string;
   DB: D1Database; // 添加D1数据库类型
+  ADMIN_USER: string;
+  ADMIN_PASS: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -294,6 +296,50 @@ app.get('/api/test-db', async (c) => {
       message: error instanceof Error ? error.message : '\u6570\u636e\u5e93\u64cd\u4f5c\u5931\u8d25'
     }, { status: 500 });
   }
+});
+
+// 登录校验中间件
+function getAuthToken(c: any) {
+  const cookie = c.req.header('cookie') || '';
+  const match = cookie.match(/auth_token=([^;]+)/);
+  return match ? match[1] : '';
+}
+
+function setAuthCookie(token: string) {
+  // 7天有效期
+  return `auth_token=${token}; Path=/; HttpOnly; Max-Age=604800; SameSite=Strict`;
+}
+
+// 登录接口
+app.post('/api/login', async (c) => {
+  const { username, password } = await c.req.json();
+  if (username === c.env.ADMIN_USER && password === c.env.ADMIN_PASS) {
+    return c.json({ status: 'success' }, {
+      headers: { 'Set-Cookie': setAuthCookie(password) }
+    });
+  }
+  return c.json({ status: 'error', message: '用户名或密码错误' }, { status: 401 });
+});
+
+// 登出接口
+app.post('/api/logout', async (c) => {
+  return c.json({ status: 'success' }, {
+    headers: { 'Set-Cookie': 'auth_token=; Path=/; HttpOnly; Max-Age=0; SameSite=Strict' }
+  });
+});
+
+// 需要登录的API统一校验
+app.use('/api/', async (c, next) => {
+  // 允许 /api/login /api/logout /api/settings 不校验
+  const url = c.req.url;
+  if (url.includes('/api/login') || url.includes('/api/logout') || url.includes('/api/settings')) return await next();
+  const token = getAuthToken(c);
+  if (token !== c.env.ADMIN_PASS) {
+    return c.json({ status: 'error', message: '未登录' }, { status: 401 });
+  }
+  // 刷新cookie时效
+  c.header('Set-Cookie', setAuthCookie(token));
+  await next();
 });
 
 export default app;

@@ -380,6 +380,91 @@ function AppContent() {
       });
   }, [modalOpen, modalItem]);
 
+  const [loggedIn, setLoggedIn] = useState<boolean>(false);
+  const [loginPending, setLoginPending] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+
+  // 检查登录态
+  useEffect(() => {
+    fetch('/api/settings', { credentials: 'include' })
+      .then(res => {
+        if (res.status === 401) setLoggedIn(false);
+        else setLoggedIn(true);
+      })
+      .catch(() => setLoggedIn(false));
+  }, []);
+
+  // 登录方法
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setLoginPending(true);
+    setLoginError('');
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: loginUser, password: loginPass })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        setLoggedIn(true);
+        setLoginUser('');
+        setLoginPass('');
+        setLoginError('');
+      } else {
+        setLoginError(data.message || '登录失败');
+      }
+    } catch {
+      setLoginError('网络错误，请重试');
+    }
+    setLoginPending(false);
+  };
+
+  // 登出方法
+  const handleLogout = async () => {
+    await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+    setLoggedIn(false);
+    setToast({ message: '已退出登录', type: 'info' });
+  };
+
+  // 未登录时渲染登录界面
+  if (!loggedIn) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#10151b]">
+        <div className="card card-hover w-full max-w-xs mx-auto p-8 flex flex-col items-center">
+          <h2 className="text-2xl font-bold text-cyan-400 mb-6">登录</h2>
+          <form className="w-full space-y-4" onSubmit={handleLogin}>
+            <input
+              className="w-full border rounded px-3 py-2 bg-[#232b36] text-gray-100 focus:outline-none focus:border-cyan-400"
+              placeholder="用户名"
+              value={loginUser}
+              onChange={e => setLoginUser(e.target.value)}
+              autoFocus
+              disabled={loginPending}
+            />
+            <input
+              className="w-full border rounded px-3 py-2 bg-[#232b36] text-gray-100 focus:outline-none focus:border-cyan-400"
+              placeholder="密码"
+              type="password"
+              value={loginPass}
+              onChange={e => setLoginPass(e.target.value)}
+              disabled={loginPending}
+            />
+            {loginError && <div className="text-red-500 text-sm text-center">{loginError}</div>}
+            <button
+              type="submit"
+              className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-cyan-400 disabled:cursor-not-allowed"
+              disabled={loginPending || !loginUser || !loginPass}
+            >{loginPending ? '登录中...' : '登录'}</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#10151b]">
       {/* 顶部导航栏 */}
@@ -692,6 +777,12 @@ function AppContent() {
                           disabled={!faviconFile}
                         >保存</button>
                       </div>
+                    </div>
+                    <div className="flex justify-end pt-4">
+                      <button
+                        className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-red-600"
+                        onClick={handleLogout}
+                      >退出登录</button>
                     </div>
                   </div>
                 ) : <div className="text-gray-400">加载中...</div>}

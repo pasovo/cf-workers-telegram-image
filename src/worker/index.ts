@@ -42,8 +42,6 @@ app.get('/api/get_photo/:file_id', async (c) => {
   }
 });
 
-// 删除以下未使用的端点
-// app.get('/api/getPhoto', (c) => c.json({ name: 'Cloudflare' }));
 
 // 上传图片处理
 app.post('/api/upload', async (c) => {
@@ -128,10 +126,35 @@ app.post('/api/upload', async (c) => {
 // 新增：获取历史记录API
 app.get('/api/history', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare(
-      'SELECT * FROM images ORDER BY created_at DESC'
-    ).all();
-    return c.json({ status: 'success', data: results });
+    // 新增：获取历史记录API
+    app.get('/api/history', async (c) => {
+        try {
+            // 添加分页参数
+            const { page = '1', limit = '20' } = c.req.query();
+            const pageNum = parseInt(page, 10) || 1;
+            const limitNum = parseInt(limit, 10) || 20;
+            const offset = (pageNum - 1) * limitNum;
+    
+            const { results } = await c.env.DB.prepare(
+                'SELECT * FROM images ORDER BY created_at DESC LIMIT ? OFFSET ?'
+            ).bind(limitNum, offset).all();
+    
+            return c.json({
+                status: 'success',
+                data: results,
+                pagination: {
+                    page: pageNum,
+                    limit: limitNum,
+                    total: results.length
+                }
+            });
+        } catch (error) {
+            return c.json({
+                status: 'error',
+                message: error instanceof Error ? error.message : '获取历史记录失败'
+            }, 500);
+        }
+    });
   } catch (error) {
     return c.json({
       status: 'error',

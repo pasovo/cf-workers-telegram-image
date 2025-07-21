@@ -42,7 +42,6 @@ function AppContent() {
   const [filenameFilter, setFilenameFilter] = useState('');
   const [files, setFiles] = useState<File[]>([]); // 多文件队列
   const [compress, setCompress] = useState(false); // 是否压缩
-  const dropRef = useRef<HTMLDivElement>(null);
   const [stats, setStats] = useState<{ total: number; size: number; hot: any[] }>({ total: 0, size: 0, hot: [] });
   const [logs, setLogs] = useState<any[]>([]);
   const [logsPage, setLogsPage] = useState(1);
@@ -107,14 +106,6 @@ function AppContent() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) handleAddFiles(e.target.files);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-  // 拖拽
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    if (e.dataTransfer.files) handleAddFiles(e.dataTransfer.files);
-  };
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
   };
   // 粘贴
   React.useEffect(() => {

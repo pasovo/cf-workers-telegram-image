@@ -27,7 +27,6 @@ function AppContent() {
   const [page, setPage] = useState(1);
   const [limit] = useState(8);
   const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 8, total: 0 });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' }>({ message: '' });
@@ -36,7 +35,7 @@ function AppContent() {
   const SHORTLINK_DOMAIN = (window as any).SHORTLINK_DOMAIN || '';
   const [selected, setSelected] = useState<string[]>([]); // 多选 file_id
   const [tagFilter, setTagFilter] = useState('');
-  const [filenameFilter, setFilenameFilter] = useState('');
+  const [filenameFilter] = useState('');
   const [files, setFiles] = useState<File[]>([]); // 多文件队列
   const [compress, setCompress] = useState(false); // 是否压缩
   const [stats, setStats] = useState<{ total: number; size: number; hot: any[] }>({ total: 0, size: 0, hot: [] });
@@ -246,7 +245,6 @@ function AppContent() {
     setUploadProgress(0);
     setPage(1);
     setSearch('');
-    setSearchInput('');
     fetchHistory(1, limit, '', tagFilter, filenameFilter);
   };
 

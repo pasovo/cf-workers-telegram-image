@@ -1,13 +1,4 @@
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button?projectName=cf-workers-telegram-image)](https://deploy.workers.cloudflare.com/?url=https://github.com/pasovo/cf-workers-telegram-image)
-
-> 部署后请在 Cloudflare 控制台设置以下环境变量：
-> - TG_BOT_TOKEN
-> - TG_CHAT_ID
-> - ADMIN_USER
-> - ADMIN_PASS
-> - SHORTLINK_DOMAIN （可选）
-
-# Sasovo Cloudflare Workers 图床
+<h1 align="center">Sasovo Cloudflare Workers 图床</h1>
 
 > 基于 Cloudflare Workers + Telegram Bot 的免费图片直链/图床系统，支持多文件上传、批量管理、标签分类、现代美观 UI。
 [感谢原项目,根据此项目修改而来](https://github.com/houhoz/cf-workers-telegram-image)
@@ -29,69 +20,40 @@
 ---
 
 ## 🚀 快速开始
+准备工作
+   - 创建 Bot 并获取 Token，并通过@getidbot获取你的 Chat ID
 
-1. **准备 Telegram Bot**
-   - 创建 Bot 并获取 Token，获取你的 Chat ID
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button?projectName=cf-workers-telegram-image)](https://deploy.workers.cloudflare.com/?url=https://github.com/pasovo/cf-workers-telegram-image)
+
+1. **一键部署**
+   - 点击上方按钮，登录 Cloudflare 账号，自动 fork 并部署本项目。
 
 2. **配置环境变量**
-   - 在 wrangler.json 中配置 `TG_BOT_TOKEN`、`TG_CHAT_ID`、`ADMIN_USER`、`ADMIN_PASS`，可选 `SHORTLINK_DOMAIN`
+   - 在 Cloudflare 控制台「设置」-「变量与机密」中，配置以下环境变量：
+     - `TG_BOT_TOKEN`：Telegram Bot Token
+     - `TG_CHAT_ID`：图片发送目标 Chat ID
+     - `ADMIN_USER`：登录用户名
+     - `ADMIN_PASS`：登录密码
+     - `SHORTLINK_DOMAIN`：自定义短链域名（可选）--域名其实写了自动获取，你用什么域名访问就会用什么域名显示直链，但不保证有人有需求所以就保留了
 
 3. **初始化数据库**
-   - 执行 schema.sql 创建/升级 images 表：
+   - 首次部署后，请在 Cloudflare D1 控制台执行以下 SQL 以初始化表结构：
      ```sql
-     -- images 表升级
-     ALTER TABLE images ADD COLUMN tags TEXT;
-     ALTER TABLE images ADD COLUMN filename TEXT;
-     ALTER TABLE images ADD COLUMN size INTEGER;
-     ALTER TABLE images ADD COLUMN visit_count INTEGER DEFAULT 0;
+     CREATE TABLE IF NOT EXISTS images (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       file_id TEXT NOT NULL,
+       chat_id TEXT NOT NULL,
+       short_code TEXT UNIQUE NOT NULL,
+       expire_at TIMESTAMP,
+       tags TEXT,
+       filename TEXT,
+       size INTEGER,
+       visit_count INTEGER DEFAULT 0,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     );
      ```
 
-4. **部署到 Cloudflare Workers**
-   - 推荐 wrangler.json 配置：
-     ```json
-     {
-       "name": "cf-workers-telegram-image",
-       "main": "./src/worker/index.ts",
-       "compatibility_date": "2025-04-01",
-       "d1_databases": [
-         { "binding": "DB", "database_name": "telegram_image_db", "database_id": "xxxx" }
-       ]
-     }
-     ```
-   - `pnpm install && pnpm run build && pnpm run deploy`
-
-5. **访问你的域名**
-   - 默认首页即为现代美观的图片上传与管理界面
-
----
-
-## ⚙️ 环境变量说明
-
-- `TG_BOT_TOKEN`：Telegram Bot Token
-- `TG_CHAT_ID`：图片发送目标的群组链接
-- `ADMIN_USER`：用户名
-- `ADMIN_PASS`：密码
-- `SHORTLINK_DOMAIN`：自定义短链域名（如 img.sasovo.top，可选）
----
-
-## 🗄️ 数据库初始化
-
-首次部署后，请在 Cloudflare D1 控制台执行以下 SQL 以初始化表结构：
-
-```sql
-CREATE TABLE IF NOT EXISTS images (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  file_id TEXT NOT NULL,
-  chat_id TEXT NOT NULL,
-  short_code TEXT UNIQUE NOT NULL,
-  expire_at TIMESTAMP,
-  tags TEXT,
-  filename TEXT,
-  size INTEGER,
-  visit_count INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+4. **访问你的域名!开始吧**
 
 ---
 
@@ -99,8 +61,6 @@ CREATE TABLE IF NOT EXISTS images (
 
 - **图片直链无法访问？**
   - 检查 wrangler.json 不要配置 assets，所有路由交给 Worker 处理
-- **数据库表结构不对？**
-  - 参考上方“数据库升级说明”手动执行 SQL
 - **如何自定义页面标题/网站图标？**
   - 进入“设置”页面，输入标题或上传 favicon 并保存即可，支持本地持久化
 

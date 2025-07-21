@@ -42,13 +42,33 @@ app.get('/api/get_photo/:file_id', async (c) => {
   }
 });
 
-app.get('/api/getPhoto', (c) => c.json({ name: 'Cloudflare' }));
+// 删除以下未使用的端点
+// app.get('/api/getPhoto', (c) => c.json({ name: 'Cloudflare' }));
 
 // 上传图片处理
 app.post('/api/upload', async (c) => {
   const { TG_BOT_TOKEN, TG_CHAT_ID } = c.env;
 
+  // 添加环境变量检查
+  if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
+      return c.json({
+          status: 'error',
+          message: '环境变量配置不完整',
+          details: 'TG_BOT_TOKEN 和 TG_CHAT_ID 必须配置'
+      }, { status: 500 });
+  }
+
   const formData = await c.req.formData();
+  const photoFile = formData.get('photo') as File;
+
+  // 添加文件验证
+  if (!photoFile || photoFile.size === 0) {
+      return c.json({
+          status: 'error',
+          message: '请上传有效的图片文件'
+      }, { status: 400 });
+  }
+
   formData.append('chat_id', TG_CHAT_ID);
 
   try {
@@ -65,27 +85,35 @@ app.post('/api/upload', async (c) => {
         status: 'error',
         message: 'Telegram API调用失败',
         details: errorDetails
-      }, statusCode);
+      }, { status: statusCode });
     }
-    const res: { ok: boolean; result: { photo: { file_id: string }[] }; description: string } = await response.json();
+    const res: {
+      ok: boolean;
+      result?: { photo?: Array<{ file_id: string }> };
+      description?: string;
+    } = await response.json();
 
-    if (res.ok) {
-      const photo = res.result.photo;
-      const file_id = photo[photo.length - 1].file_id; // 获取最高分辨率图片ID
+    if (res.ok && res.result?.photo && res.result.photo.length > 0) {
+        const photo = res.result.photo;
+        const file_id = photo[photo.length - 1].file_id; // 获取最高分辨率图片ID
       
       // 新增：保存记录到数据库
       try {
-        await c.env.DB.prepare(
+        const stmt = c.env.DB.prepare(
           'INSERT INTO images (file_id, chat_id) VALUES (?, ?)'
-        ).bind(file_id, TG_CHAT_ID).run();
-      } catch (dbError) {
+        );
+        const dbResult = await stmt.bind(file_id, TG_CHAT_ID).run();
+        if (!dbResult.success) {
+            throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
+        }
+    } catch (dbError) {
         console.error('数据库插入错误:', dbError);
         return c.json({
-          status: 'error',
-          message: '保存记录失败',
-          details: dbError instanceof Error ? dbError.message : '未知数据库错误'
-        }, 500);
-      }
+            status: 'error',
+            message: '保存记录失败',
+            details: dbError instanceof Error ? dbError.message : String(dbError)
+        }, { status: 500 });
+    }
       
       return c.json({ status: 'success', phonos: photo });
     } else {

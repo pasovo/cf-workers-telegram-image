@@ -44,10 +44,8 @@ function AppContent() {
   const [compress, setCompress] = useState(false); // 是否压缩
   const dropRef = useRef<HTMLDivElement>(null);
   const [stats, setStats] = useState<{ total: number; size: number; hot: any[] }>({ total: 0, size: 0, hot: [] });
-  const [showLogs, setShowLogs] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
   const [logsPage, setLogsPage] = useState(1);
-  const [logsTotal, setLogsTotal] = useState(0);
   const [logsLoading, setLogsLoading] = useState(false);
   const [tab, setTab] = useState<'upload'|'gallery'|'logs'|'settings'>('upload');
   const [settings, setSettings] = useState<any>(null);
@@ -288,7 +286,6 @@ function AppContent() {
       const data = await res.json();
       if (data.status === 'success') {
         setLogs(data.data);
-        setLogsTotal(data.pagination.total);
         setLogsPage(page);
       }
     } catch {}
@@ -329,7 +326,7 @@ function AppContent() {
           <div className="flex-1 min-w-[180px]">
             <span className="text-xs text-gray-500">热门图片：</span>
             <div className="flex gap-2 mt-1 overflow-x-auto">
-              {stats.hot.map((img, i) => (
+              {stats.hot.map(img => (
                 <a key={img.id} href={`/img/${img.short_code}`} target="_blank" rel="noopener" title={`访问量：${img.visit_count}`}
                   className="block border rounded hover:shadow p-1 bg-white">
                   <img src={`/api/get_photo/${img.file_id}?thumb=1`} alt="热门" className="w-12 h-12 object-cover rounded" />

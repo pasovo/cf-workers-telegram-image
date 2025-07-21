@@ -22,10 +22,23 @@
     @apply shadow-2xl scale-[1.02] transition-all duration-200;
   }
   .nav-btn {
-    @apply px-3 py-1 rounded-lg font-bold text-base hover:bg-[#232b36] transition;
+    @apply px-3 py-1 rounded-lg font-bold text-base transition relative;
+    border: 2px solid transparent;
+  }
+  .nav-btn:hover {
+    border: 2px solid #22d3ee33;
+    background: #181f29;
   }
   .nav-btn-active {
     @apply text-cyan-400 border-b-2 border-cyan-400;
+    background: #10151b;
+  }
+  .fade-content {
+    @apply transition-opacity duration-300;
+    opacity: 1;
+  }
+  .fade-content-leave {
+    opacity: 0;
   }
   .banner {
     @apply w-full rounded-2xl shadow-xl mb-8 overflow-hidden flex items-center justify-center bg-gradient-to-br from-[#1a2230] to-[#232b36];

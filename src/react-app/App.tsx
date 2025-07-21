@@ -171,6 +171,7 @@ function AppContent() {
               const res = JSON.parse(xhr.responseText);
               if (xhr.status === 200 && res.status === 'success') {
                 setToast({ message: '图片上传成功', type: 'success' });
+                fetchStats(); // 上传后刷新统计
                 resolve();
               } else {
                 setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
@@ -244,6 +245,7 @@ function AppContent() {
         setToast({ message: '删除成功', type: 'success' });
         setSelected([]);
         fetchHistory(page, limit, search, tagFilter, filenameFilter);
+        fetchStats(); // 删除后刷新统计
       } else {
         setToast({ message: '删除失败', type: 'error' });
       }
@@ -322,18 +324,6 @@ function AppContent() {
           <div className="flex flex-col items-center">
             <span className="text-lg font-bold">{(stats.size / 1024 / 1024).toFixed(2)} MB</span>
             <span className="text-xs text-gray-500">空间占用</span>
-          </div>
-          <div className="flex-1 min-w-[180px]">
-            <span className="text-xs text-gray-500">热门图片：</span>
-            <div className="flex gap-2 mt-1 overflow-x-auto">
-              {stats.hot.map(img => (
-                <a key={img.id} href={`/img/${img.short_code}`} target="_blank" rel="noopener" title={`访问量：${img.visit_count}`}
-                  className="block border rounded hover:shadow p-1 bg-white">
-                  <img src={`/api/get_photo/${img.file_id}?thumb=1`} alt="热门" className="w-12 h-12 object-cover rounded" />
-                  <div className="text-center text-xs text-gray-500">{img.visit_count}</div>
-                </a>
-              ))}
-            </div>
           </div>
         </div>
       )}

@@ -43,6 +43,9 @@ function AppContent() {
   const [showOriginal, setShowOriginal] = useState<{ [file_id: string]: boolean }>({});
   const [tagFilter, setTagFilter] = useState('');
   const [filenameFilter, setFilenameFilter] = useState('');
+  const [files, setFiles] = useState<File[]>([]); // 多文件队列
+  const [compress, setCompress] = useState(false); // 是否压缩
+  const dropRef = useRef<HTMLDivElement>(null);
 
   // 文件名过滤
   const sanitizeFilename = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -77,76 +80,119 @@ function AppContent() {
     // eslint-disable-next-line
   }, [page, limit, search, tagFilter, filenameFilter]);
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  // 处理文件添加（多选、拖拽、粘贴）
+  const handleAddFiles = (fileList: FileList | File[]) => {
+    const arr = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    setFiles(prev => [...prev, ...arr]);
   };
-
-  const handleFilenameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = sanitizeFilename(e.target.value);
-    setFilename(val);
+  // input 选择
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) handleAddFiles(e.target.files);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
-
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  // 拖拽
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (!selectedFile) return;
+    if (e.dataTransfer.files) handleAddFiles(e.dataTransfer.files);
+  };
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+  // 粘贴
+  React.useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (e.clipboardData) {
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === 'file' && item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            if (file) setFiles(prev => [...prev, file]);
+          }
+        }
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, []);
+
+  // 图片压缩（canvas）
+  const compressImage = (file: File, quality = 0.7, maxW = 1600, maxH = 1600): Promise<File> => {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxW || h > maxH) {
+          const ratio = Math.min(maxW / w, maxH / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(blob => {
+          if (blob) {
+            resolve(new File([blob], file.name, { type: blob.type }));
+          } else {
+            resolve(file);
+          }
+          URL.revokeObjectURL(url);
+        }, file.type, quality);
+      };
+      img.onerror = () => resolve(file);
+      img.src = url;
+    });
+  };
+
+  // 上传队列处理
+  const handleUploadAll = async () => {
+    if (files.length === 0) return;
     setPending(true);
-    setUploadProgress(0);
-    try {
-      const formData = new FormData(e.currentTarget);
+    for (const file of files) {
+      let uploadFile = file;
+      if (compress) uploadFile = await compressImage(file);
+      const formData = new FormData();
+      formData.append('photo', uploadFile);
       formData.append('expire', expire);
       formData.append('tags', tags);
-      formData.append('filename', filename);
-      // 使用 XMLHttpRequest 以便获取上传进度
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/upload');
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) {
-            setUploadProgress(Math.round((event.loaded / event.total) * 100));
-          }
-        };
-        xhr.onload = () => {
-          try {
-            const res = JSON.parse(xhr.responseText);
-            if (xhr.status === 200 && res.status === 'success') {
-              setToast({ message: '图片已成功上传到 Telegram', type: 'success' });
-              setSelectedFile(null);
-              setPreviewUrl(null);
-              if (fileInputRef.current) fileInputRef.current.value = '';
-              setPage(1);
-              setSearch('');
-              setSearchInput('');
-              fetchHistory(1, limit, '', tagFilter, filenameFilter);
-              resolve();
-            } else {
-              setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
-              reject(new Error(res.message || '上传失败'));
+      formData.append('filename', filename ? filename : uploadFile.name);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/upload');
+          xhr.onload = () => {
+            try {
+              const res = JSON.parse(xhr.responseText);
+              if (xhr.status === 200 && res.status === 'success') {
+                setToast({ message: '图片上传成功', type: 'success' });
+                resolve();
+              } else {
+                setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
+                reject(new Error(res.message || '上传失败'));
+              }
+            } catch (err) {
+              setToast({ message: '上传失败，服务器响应异常', type: 'error' });
+              reject(err);
             }
-          } catch (err) {
-            setToast({ message: '上传失败，服务器响应异常', type: 'error' });
-            reject(err);
-          }
-        };
-        xhr.onerror = () => {
-          setToast({ message: '上传失败，请重试', type: 'error' });
-          reject(new Error('上传失败'));
-        };
-        xhr.send(formData);
-      });
-    } catch (error) {
-      // 错误已在 xhr.onload/onerror 处理
-    } finally {
-      setPending(false);
-      setUploadProgress(0);
+          };
+          xhr.onerror = () => {
+            setToast({ message: '上传失败，请重试', type: 'error' });
+            reject(new Error('上传失败'));
+          };
+          xhr.send(formData);
+        });
+      } catch {}
     }
+    setFiles([]);
+    setPending(false);
+    setUploadProgress(0);
+    setPage(1);
+    setSearch('');
+    setSearchInput('');
+    fetchHistory(1, limit, '', tagFilter, filenameFilter);
   };
 
   // 搜索按钮点击
@@ -223,10 +269,16 @@ function AppContent() {
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-4xl">
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
       <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-center">图片上传到 Telegram</h1>
-      <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-4 sm:p-6">
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          {/* 文件上传区域 */}
-          <div className="space-y-2">
+      <div
+        ref={dropRef}
+        className="max-w-md mx-auto bg-white rounded-lg shadow-md p-4 sm:p-6 border-2 border-dashed border-gray-300 hover:border-blue-400 transition"
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        style={{ minHeight: 180 }}
+      >
+        <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
+          {/* 拖拽/粘贴/多选上传区域 */}
+          <div className="space-y-2 flex flex-col items-center">
             <label
               htmlFor="photo"
               className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition duration-300 flex items-center justify-center cursor-pointer"
@@ -234,38 +286,33 @@ function AppContent() {
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
               </svg>
-              选择图片
+              选择图片（可多选/拖拽/粘贴）
               <input
                 type="file"
                 id="photo"
                 name="photo"
                 accept="image/*"
-                required
+                multiple
                 className="hidden"
                 onChange={handleFileChange}
                 ref={fileInputRef}
               />
             </label>
-            {selectedFile && (
-              <div className="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded-md flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-                </svg>
-                <span>{selectedFile.name}</span>
+            {files.length > 0 && (
+              <div className="w-full flex flex-wrap gap-2 mt-2">
+                {files.map((file, idx) => (
+                  <div key={idx} className="flex flex-col items-center border rounded p-2 bg-gray-50">
+                    <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" />
+                    <span className="text-xs break-all max-w-[80px]">{file.name}</span>
+                  </div>
+                ))}
               </div>
             )}
-            {previewUrl && (
-              <div className="mt-4">
-                <p className="text-sm text-gray-600 mb-2">图片预览:</p>
-                <div className="relative rounded-lg overflow-hidden border border-gray-300">
-                  <img
-                    src={previewUrl}
-                    alt="Preview"
-                    className="w-full h-auto object-contain max-h-60"
-                  />
-                </div>
-              </div>
-            )}
+          </div>
+          {/* 压缩选项 */}
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="compress" checked={compress} onChange={e => setCompress(e.target.checked)} />
+            <label htmlFor="compress" className="text-sm text-gray-700">上传前压缩图片</label>
           </div>
           {/* 标签输入 */}
           <div className="flex items-center gap-2">
@@ -288,7 +335,7 @@ function AppContent() {
               name="filename"
               placeholder="自定义文件名"
               value={filename}
-              onChange={handleFilenameChange}
+              onChange={e => setFilename(sanitizeFilename(e.target.value))}
               maxLength={64}
             />
             <span className="text-xs text-gray-400">仅字母数字._-</span>
@@ -321,14 +368,14 @@ function AppContent() {
             <button
               type="submit"
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
-              disabled={pending || !selectedFile}
+              disabled={pending || files.length === 0}
             >
               {pending ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                  上传中...
+                  批量上传中...
                 </span>
-              ) : '上传到 Telegram'}
+              ) : '批量上传'}
             </button>
           </div>
         </form>

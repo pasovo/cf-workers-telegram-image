@@ -57,6 +57,16 @@ app.post('/api/upload', async (c) => {
       { method: 'POST', body: formData }
     );
 
+    if (!response.ok) {
+      const errorDetails = await response.text();
+      console.error('Telegram API错误:', errorDetails);
+      const statusCode = Number(response.status) || 500;
+      return c.json({
+        status: 'error',
+        message: 'Telegram API调用失败',
+        details: errorDetails
+      }, statusCode);
+    }
     const res: { ok: boolean; result: { photo: { file_id: string }[] }; description: string } = await response.json();
 
     if (res.ok) {
@@ -64,9 +74,18 @@ app.post('/api/upload', async (c) => {
       const file_id = photo[photo.length - 1].file_id; // 获取最高分辨率图片ID
       
       // 新增：保存记录到数据库
-      await c.env.DB.prepare(
-        'INSERT INTO images (file_id, chat_id) VALUES (?, ?)'
-      ).bind(file_id, TG_CHAT_ID).run();
+      try {
+        await c.env.DB.prepare(
+          'INSERT INTO images (file_id, chat_id) VALUES (?, ?)'
+        ).bind(file_id, TG_CHAT_ID).run();
+      } catch (dbError) {
+        console.error('数据库插入错误:', dbError);
+        return c.json({
+          status: 'error',
+          message: '保存记录失败',
+          details: dbError instanceof Error ? dbError.message : '未知数据库错误'
+        }, 500);
+      }
       
       return c.json({ status: 'success', phonos: photo });
     } else {

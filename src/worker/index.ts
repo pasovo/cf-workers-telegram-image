@@ -160,29 +160,10 @@ app.get('/img/:short_code', async (c) => {
   if (row.expire_at && new Date(String(row.expire_at)).getTime() < Date.now()) {
     return c.text('链接已过期', 410);
   }
-  // 代理图片
-  const TG_BOT_TOKEN = c.env.TG_BOT_TOKEN;
-  // 获取 file_path
-  const getFileResponse = await fetch(
-    `https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${row.file_id}`
-  );
-  const getFileRes: any = await getFileResponse.json();
-  if (getFileRes.ok) {
-    const file_path = getFileRes.result.file_path;
-    const imageResponse = await fetch(
-      `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`
-    );
-    const imageRes = await imageResponse.arrayBuffer();
-    return new Response(imageRes, {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=31536000'
-      },
-    });
-  } else {
-    return c.text('图片获取失败', 404);
-  }
+  // 返回图片展示 HTML 页面
+  const imgUrl = `/api/get_photo/${row.file_id}`;
+  const html = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>图片直链</title></head><body style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#fafbfc;"><img src="${imgUrl}" style="max-width:100vw;max-height:80vh;box-shadow:0 2px 8px #0001;border-radius:8px;"><p style="color:#888;margin-top:16px;">Powered by img.sasovo.top</p></body></html>`;
+  return c.html(html);
 });
 
 // 新增：获取历史记录API

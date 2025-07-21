@@ -292,6 +292,11 @@ function AppContent() {
     setShowOriginal(prev => ({ ...prev, [file_id]: !prev[file_id] }));
   };
 
+  // 删除待上传图片
+  const handleRemoveFile = (idx: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
+  };
+
   // 获取统计
   const fetchStats = async () => {
     try {
@@ -397,7 +402,15 @@ function AppContent() {
                   {files.length > 0 && (
                     <div className="w-full flex flex-wrap gap-2 mt-2">
                       {files.map((file, idx) => (
-                        <div key={idx} className="flex flex-col items-center border rounded p-2 bg-[#232b36]">
+                        <div key={idx} className="relative flex flex-col items-center border rounded p-2 bg-[#232b36]">
+                          <button
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-[#232b36] text-gray-400 hover:text-red-400 rounded-full flex items-center justify-center shadow"
+                            type="button"
+                            title="移除"
+                            onClick={() => handleRemoveFile(idx)}
+                          >
+                            ×
+                          </button>
                           <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" />
                           <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
                         </div>
@@ -407,8 +420,13 @@ function AppContent() {
                 </div>
                 {/* 压缩选项 */}
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" id="compress" checked={compress} onChange={e => setCompress(e.target.checked)} />
-                  <label htmlFor="compress" className="text-sm text-gray-300">上传前压缩图片</label>
+                  <button
+                    type="button"
+                    className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${compress ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                    onClick={() => setCompress(v => !v)}
+                  >
+                    {compress ? '✓ ' : ''}上传前压缩图片
+                  </button>
                 </div>
                 {/* 标签输入 */}
                 <div className="flex items-center gap-2">
@@ -518,8 +536,13 @@ function AppContent() {
                 </div>
                 {/* 批量操作栏 */}
                 <div className="flex items-center gap-2 mb-2">
-                  <input type="checkbox" checked={selected.length === history.length && history.length > 0} onChange={e => handleSelectAll(e.target.checked)} />
-                  <span className="text-sm">全选</span>
+                  <button
+                    type="button"
+                    className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${selected.length === history.length && history.length > 0 ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                    onClick={() => handleSelectAll(!(selected.length === history.length && history.length > 0))}
+                  >
+                    {selected.length === history.length && history.length > 0 ? '✓ ' : ''}全选
+                  </button>
                   <button className="px-2 py-1 bg-red-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
                   <button className="px-2 py-1 bg-green-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchExport}>导出JSON</button>
                 </div>
@@ -555,7 +578,14 @@ function AppContent() {
                       return (
                         <div key={item.id} className="border rounded-lg p-4 flex flex-col gap-2 hover:shadow-md transition-shadow bg-white">
                           <div className="flex items-center gap-3">
-                            <input type="checkbox" checked={isChecked} onChange={e => handleSelect(item.file_id, e.target.checked)} />
+                            <button
+                              type="button"
+                              className={`w-6 h-6 rounded border-2 flex items-center justify-center transition ${isChecked ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                              onClick={() => handleSelect(item.file_id, !isChecked)}
+                              title={isChecked ? '取消选择' : '选择'}
+                            >
+                              {isChecked ? '✓' : ''}
+                            </button>
                             <img 
                               src={`/api/get_photo/${item.file_id}${isShowOriginal ? '' : '?thumb=1'}`}
                               alt="History preview" 

@@ -325,16 +325,12 @@ function AppContent() {
           <button className="text-gray-400 hover:text-cyan-400"><svg width="20" height="20" fill="none"><circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="2"/><path d="M15 15l-2.5-2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></button>
         </div>
       </nav>
-      {/* Banner区块 */}
-      <div className="banner relative mb-8">
-        <img className="banner-img" src="/preview.png" alt="banner" />
-        <div className="banner-title">欢迎使用 Sasovo 图床</div>
-      </div>
-      <div className="container mx-auto max-w-4xl px-2 sm:px-4">
+      {/* Banner区块已移除 */}
+      <div className="container mx-auto max-w-4xl px-2 sm:px-4 py-8">
         <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
         {/* 统计区块，仅在上传/图库页显示 */}
         {(tab==='upload'||tab==='gallery') && (
-          <div className="flex gap-8 mb-6">
+          <div className="flex gap-8 mb-8">
             <div className="card flex-1 flex flex-col items-center">
               <span className="text-2xl font-bold text-cyan-400">{stats.total}</span>
               <span className="text-xs text-gray-400 mt-1">上传总数</span>
@@ -622,13 +618,13 @@ function AppContent() {
           </div>
         )}
         {tab==='settings' && (
-          <div className="card card-hover mb-8">
+          <div className="card card-hover mb-8 flex justify-center">
             <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 mx-auto">
-              <h2 className="text-lg font-bold mb-4">系统设置</h2>
+              <h2 className="text-lg font-bold mb-4 text-gray-400">系统设置</h2>
               {settings ? (
                 <ul className="text-sm text-gray-700 space-y-2">
                   <li><b>短链域名：</b>{settings.domain}</li>
-                  <li><b>Telegram Chat ID：</b>{settings.chat_id}</li>
+                  {/* <li><b>Telegram Chat ID：</b>{settings.chat_id}</li> */}
                   <li><b>图片总数：</b>{settings.total}</li>
                   <li><b>空间占用：</b>{(settings.size/1024/1024).toFixed(2)} MB</li>
                 </ul>

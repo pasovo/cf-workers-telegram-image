@@ -37,7 +37,7 @@
      - `SHORTLINK_DOMAIN`：自定义短链域名（可选）--域名其实写了自动获取，你用什么域名访问就会用什么域名显示直链，但不保证有人有需求所以就保留了
 
 3. **初始化数据库**
-   - 首次部署后，请在 Cloudflare D1 控制台执行以下 SQL 以初始化表结构：
+   - 首次部署后，请添加一个Cloudflare D1数据库，绑定变量名为DB（重要），数据库名称随意，在控制台执行以下 SQL 以初始化表结构：
      ```sql
      CREATE TABLE IF NOT EXISTS images (
        id INTEGER PRIMARY KEY AUTOINCREMENT,

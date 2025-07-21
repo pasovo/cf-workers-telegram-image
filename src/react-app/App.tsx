@@ -40,7 +40,6 @@ function AppContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [phonos, setPhonos] = useState<Array<{ file_id: string; file_unique_id: string; file_size: number; width: number; height: number }>>([]);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,12 +85,12 @@ function AppContent() {
       const res = await response.json();
 
       if (res.status === 'success') {
-        setPhonos(res.phonos);
         alert('图片已成功上传到 Telegram');
         setSelectedFile(null);
         setPreviewUrl(null);
-        fileInputRef.current?.reset();
-        // 重新加载历史记录
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
         window.location.reload();
       } else {
         alert(`上传失败: ${res.message || '未知错误'}`);

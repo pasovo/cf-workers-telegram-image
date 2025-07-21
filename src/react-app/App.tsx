@@ -606,53 +606,55 @@ function AppContent() {
               <div className="max-w-md w-full p-6 mx-auto">
                 <h2 className="text-lg font-bold mb-4 text-cyan-400">系统设置</h2>
                 {settings ? (
-                  <ul className="text-sm text-gray-100 space-y-2">
-                    {/* <li><b>短链域名：</b>{settings.domain}</li> */}
-                    {/* <li><b>Telegram Chat ID：</b>{settings.chat_id}</li> */}
-                    <li className="flex items-center gap-2"><b>页面标题：</b>
-                      <input
-                        className="border rounded px-2 py-1 bg-[#232b36] text-gray-100"
-                        style={{width:180}}
-                        value={titleInput}
-                        onChange={e => setTitleInput(e.target.value)}
-                        placeholder="图床"
-                      />
-                      <button
-                        className="ml-2 px-2 py-1 bg-cyan-600 text-white rounded hover:bg-cyan-700"
-                        onClick={() => {
-                          setPageTitle(titleInput.trim() || '图床');
-                          localStorage.setItem('pageTitle', titleInput.trim() || '图床');
-                        }}
-                        type="button"
-                      >保存</button>
-                    </li>
-                    <li className="flex items-center gap-2"><b>网站图标：</b>
-                      <input
-                        type="file"
-                        accept="image/x-icon,.ico,image/svg+xml,.svg,image/png,.png,image/jpeg,.jpg,.jpeg,image/gif,.gif,image/bmp,.bmp,image/webp,.webp"
-                        onChange={e => setFaviconFile(e.target.files?.[0] || null)}
-                        className="text-xs"
-                      />
-                      <button
-                        className="ml-2 px-2 py-1 bg-cyan-600 text-white rounded hover:bg-cyan-700"
-                        onClick={async () => {
-                          if (faviconFile) {
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              if (typeof reader.result === 'string') {
-                                setFaviconUrl(reader.result);
-                                localStorage.setItem('faviconUrl', reader.result);
-                              }
-                            };
-                            reader.readAsDataURL(faviconFile);
-                          }
-                        }}
-                        type="button"
-                        disabled={!faviconFile}
-                      >保存</button>
-                      <img src={faviconUrl} alt="favicon" className="ml-2 w-6 h-6 inline-block align-middle rounded" />
-                    </li>
-                  </ul>
+                  <div className="space-y-6">
+                    <div>
+                      <div className="text-sm text-gray-300 font-bold mb-1">页面标题</div>
+                      <div className="flex items-center">
+                        <input
+                          className="border rounded px-2 py-2 bg-[#232b36] text-gray-100 flex-1"
+                          value={titleInput}
+                          onChange={e => setTitleInput(e.target.value)}
+                          placeholder="图床"
+                        />
+                        <button
+                          className="ml-3 px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                          onClick={() => {
+                            setPageTitle(titleInput.trim() || '图床');
+                            localStorage.setItem('pageTitle', titleInput.trim() || '图床');
+                          }}
+                          type="button"
+                        >保存</button>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-300 font-bold mb-1">网站图标</div>
+                      <div className="flex items-center">
+                        <input
+                          type="file"
+                          accept="image/x-icon,.ico,image/svg+xml,.svg,image/png,.png,image/jpeg,.jpg,.jpeg,image/gif,.gif,image/bmp,.bmp,image/webp,.webp"
+                          onChange={e => setFaviconFile(e.target.files?.[0] || null)}
+                          className="text-xs flex-1"
+                        />
+                        <button
+                          className="ml-3 px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                          onClick={async () => {
+                            if (faviconFile) {
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                if (typeof reader.result === 'string') {
+                                  setFaviconUrl(reader.result);
+                                  localStorage.setItem('faviconUrl', reader.result);
+                                }
+                              };
+                              reader.readAsDataURL(faviconFile);
+                            }
+                          }}
+                          type="button"
+                          disabled={!faviconFile}
+                        >保存</button>
+                      </div>
+                    </div>
+                  </div>
                 ) : <div className="text-gray-400">加载中...</div>}
               </div>
             </div>

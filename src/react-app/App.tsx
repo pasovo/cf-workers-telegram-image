@@ -1,6 +1,5 @@
 
 import React, { useState, useRef } from 'react';
-import type { ChangeEvent, FormEvent } from 'react';
 
 // 全局弹窗组件
 function Toast({ message, type = 'info', onClose }: { message: string; type?: 'info' | 'error' | 'success'; onClose: () => void }) {

@@ -250,11 +250,6 @@ function AppContent() {
     fetchHistory(1, limit, '', tagFilter, filenameFilter);
   };
 
-  // 搜索按钮点击
-  const handleSearch = () => {
-    setPage(1);
-    setSearch(searchInput.trim());
-  };
   // 回车搜索
   // 分页按钮
   const handlePrevPage = () => { if (page > 1) setPage(page - 1); };
@@ -382,10 +377,6 @@ function AppContent() {
           <button className={tab==='gallery' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('gallery')}>图库</button>
           <button className={tab==='logs' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('logs')}>日志</button>
           <button className={tab==='settings' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('settings')}>设置</button>
-        </div>
-        <div className="flex items-center gap-2">
-          <input className="bg-[#232b36] rounded px-3 py-1 text-sm text-gray-200 focus:outline-none" placeholder="搜索" style={{width:120}} />
-          <button className="text-gray-400 hover:text-cyan-400"><svg width="20" height="20" fill="none"><circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="2"/><path d="M15 15l-2.5-2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></button>
         </div>
       </nav>
       {/* Banner区块已移除 */}

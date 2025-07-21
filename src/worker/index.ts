@@ -9,38 +9,10 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-app.get('/api/get_photo/:file_id', async (c) => {
-  const { TG_BOT_TOKEN } = c.env;
-  const file_id = c.req.param('file_id');
-
-  const getFileResponse = await fetch(
-    `https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${file_id}`
-  );
-  const getFileRes: {
-    ok: boolean;
-    result: { file_path: string };
-  } = await getFileResponse.json();
-
-  if (getFileRes.ok) {
-    const file_path = getFileRes.result.file_path;
-    const imageResponse = await fetch(
-      `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`
-    );
-    const imageRes = await imageResponse.arrayBuffer();
-
-    return new Response(imageRes, {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/png',
-      },
-    });
-  } else {
-    return c.json({
-      status: 'error',
-      message: '获取文件失败',
-    });
-  }
-});
+// 工具函数：过滤文件名非法字符
+function sanitizeFilename(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
 
 // 工具函数：生成唯一短码
 function genShortCode(length = 7) {
@@ -60,7 +32,7 @@ function getBaseUrl(env: any, req: any) {
   return env.SHORTLINK_DOMAIN || (host ? `${proto}://${host}` : '');
 }
 
-// 上传图片处理（支持有效期和短链）
+// 上传图片处理（支持有效期、短链、标签、文件名）
 app.post('/api/upload', async (c) => {
   const { TG_BOT_TOKEN, TG_CHAT_ID, DB } = c.env;
   if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
@@ -79,12 +51,16 @@ app.post('/api/upload', async (c) => {
       }, { status: 400 });
   }
   formData.append('chat_id', TG_CHAT_ID);
-  // 新增：有效期参数
+  // 有效期参数
   const expireOption = formData.get('expire') as string || 'forever';
   let expire_at: string | null = null;
   if (expireOption === '1') expire_at = new Date(Date.now() + 86400 * 1000).toISOString();
   if (expireOption === '7') expire_at = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
   if (expireOption === '30') expire_at = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  // 标签和文件名
+  let tags = (formData.get('tags') as string || '').trim();
+  let filename = (formData.get('filename') as string || '').trim();
+  if (filename) filename = sanitizeFilename(filename);
   // forever/null 表示永久
   try {
     const response = await fetch(
@@ -121,9 +97,9 @@ app.post('/api/upload', async (c) => {
       // 保存记录到数据库
       try {
         const stmt = DB.prepare(
-          'INSERT INTO images (file_id, chat_id, short_code, expire_at) VALUES (?, ?, ?, ?)' 
+          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename) VALUES (?, ?, ?, ?, ?, ?)' 
         );
-        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at).run();
+        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename).run();
         if (!dbResult.success) {
             throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
         }
@@ -137,7 +113,7 @@ app.post('/api/upload', async (c) => {
       }
       // 返回短链
       const baseUrl = getBaseUrl(c.env, c.req);
-      const shortUrl = baseUrl ? `${baseUrl}/${short_code}` : `/${short_code}`;
+      const shortUrl = baseUrl ? `${baseUrl}/img/${short_code}` : `/img/${short_code}`;
       return c.json({ status: 'success', phonos: photo, short_code, short_url: shortUrl, expire_at });
     } else {
       return c.json({ status: 'error', message: res.description || '上传失败' });
@@ -147,7 +123,54 @@ app.post('/api/upload', async (c) => {
     return c.json({ status: 'error', message: '服务器错误' }, { status: 500 });
   }
 });
-
+// /api/get_photo/:file_id 支持缩略图
+app.get('/api/get_photo/:file_id', async (c) => {
+  const { TG_BOT_TOKEN } = c.env;
+  const file_id = c.req.param('file_id');
+  const isThumb = c.req.query('thumb') === '1';
+  // 获取 file_path
+  const getFileResponse = await fetch(
+    `https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${file_id}`
+  );
+  const getFileRes: any = await getFileResponse.json();
+  if (getFileRes.ok) {
+    const file_path = getFileRes.result.file_path;
+    let url = `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`;
+    if (isThumb) {
+      // Telegram 缩略图接口（需实际测试，部分图片可能无缩略图）
+      url += '?thumb=1';
+    }
+    const imageResponse = await fetch(url);
+    const imageRes = await imageResponse.arrayBuffer();
+    return new Response(imageRes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/png',
+      },
+    });
+  } else {
+    return c.json({
+      status: 'error',
+      message: '获取文件失败',
+    });
+  }
+});
+// 批量删除接口
+app.post('/api/delete', async (c) => {
+  const { DB } = c.env;
+  const { ids } = await c.req.json(); // ids: file_id[]
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
+  }
+  try {
+    for (const id of ids) {
+      await DB.prepare('DELETE FROM images WHERE file_id = ?').bind(id).run();
+    }
+    return c.json({ status: 'success' });
+  } catch (error) {
+    return c.json({ status: 'error', message: '删除失败' }, { status: 500 });
+  }
+});
 // /img/:short_code 直链访问
 app.get('/img/:short_code', async (c) => {
   const { short_code } = c.req.param();
@@ -160,45 +183,67 @@ app.get('/img/:short_code', async (c) => {
   if (row.expire_at && new Date(String(row.expire_at)).getTime() < Date.now()) {
     return c.text('链接已过期', 410);
   }
-  // 返回图片展示 HTML 页面
-  const imgUrl = `/api/get_photo/${row.file_id}`;
-  const html = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>图片直链</title></head><body style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#fafbfc;"><img src="${imgUrl}" style="max-width:100vw;max-height:80vh;box-shadow:0 2px 8px #0001;border-radius:8px;"><p style="color:#888;margin-top:16px;">Powered by img.sasovo.top</p></body></html>`;
-  return c.html(html);
+  // 代理图片内容
+  const TG_BOT_TOKEN = c.env.TG_BOT_TOKEN;
+  const getFileResponse = await fetch(
+    `https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${row.file_id}`
+  );
+  const getFileRes: any = await getFileResponse.json();
+  if (getFileRes.ok) {
+    const file_path = getFileRes.result.file_path;
+    const imageResponse = await fetch(
+      `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`
+    );
+    const imageRes = await imageResponse.arrayBuffer();
+    return new Response(imageRes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=31536000'
+      },
+    });
+  } else {
+    return c.text('图片获取失败', 404);
+  }
 });
 
 // 新增：获取历史记录API
 app.get('/api/history', async (c) => {
   try {
-    // 添加分页和搜索参数
-    const { page = '1', limit = '20', search = '' } = c.req.query();
+    const { page = '1', limit = '20', search = '', tag = '', filename = '' } = c.req.query();
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 20;
     const offset = (pageNum - 1) * limitNum;
-
-    let sql = 'SELECT * FROM images';
+    let sql = 'SELECT * FROM images WHERE 1=1';
     let params: any[] = [];
     if (search) {
-      sql += ' WHERE file_id LIKE ? OR chat_id LIKE ?';
+      sql += ' AND (file_id LIKE ? OR chat_id LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
+    }
+    if (tag) {
+      sql += ' AND tags LIKE ?';
+      params.push(`%${tag}%`);
+    }
+    if (filename) {
+      sql += ' AND filename LIKE ?';
+      params.push(`%${filename}%`);
     }
     sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(limitNum, offset);
-
     const { results } = await c.env.DB.prepare(sql).bind(...params).all();
-
     return c.json({
       status: 'success',
       data: results,
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total: results.length // 注意：这里只返回当前页数量，如需总数可再查 COUNT(*)
+        total: results.length
       }
     });
   } catch (error) {
     return c.json({
       status: 'error',
-      message: error instanceof Error ? error.message : '\u83b7\u53d6\u5386\u53f2\u8bb0\u5f55\u5931\u8d25'
+      message: error instanceof Error ? error.message : '获取历史记录失败'
     }, { status: 500 });
   }
 });

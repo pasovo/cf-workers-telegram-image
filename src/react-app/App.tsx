@@ -26,7 +26,7 @@ function AppContent() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string }>>([]);
+  const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string; tags?: string; filename?: string }>>([]);
   const [page, setPage] = useState(1);
   const [limit] = useState(8);
   const [search, setSearch] = useState('');
@@ -37,12 +37,23 @@ function AppContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expire, setExpire] = useState('forever');
   const SHORTLINK_DOMAIN = (window as any).SHORTLINK_DOMAIN || '';
+  const [tags, setTags] = useState('');
+  const [filename, setFilename] = useState('');
+  const [selected, setSelected] = useState<string[]>([]); // 多选 file_id
+  const [showOriginal, setShowOriginal] = useState<{ [file_id: string]: boolean }>({});
+  const [tagFilter, setTagFilter] = useState('');
+  const [filenameFilter, setFilenameFilter] = useState('');
 
-  const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '') => {
+  // 文件名过滤
+  const sanitizeFilename = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '', tagVal = '', filenameVal = '') => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(pageNum), limit: String(limitNum) });
       if (searchVal) params.append('search', searchVal);
+      if (tagVal) params.append('tag', tagVal);
+      if (filenameVal) params.append('filename', filenameVal);
       const response = await fetch(`/api/history?${params.toString()}`);
       if (!response.ok) throw new Error('获取历史记录失败');
       const data = await response.json();
@@ -62,9 +73,9 @@ function AppContent() {
   };
 
   React.useEffect(() => {
-    fetchHistory(page, limit, search);
+    fetchHistory(page, limit, search, tagFilter, filenameFilter);
     // eslint-disable-next-line
-  }, [page, limit, search]);
+  }, [page, limit, search, tagFilter, filenameFilter]);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -78,6 +89,11 @@ function AppContent() {
     }
   };
 
+  const handleFilenameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = sanitizeFilename(e.target.value);
+    setFilename(val);
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedFile) return;
@@ -86,6 +102,8 @@ function AppContent() {
     try {
       const formData = new FormData(e.currentTarget);
       formData.append('expire', expire);
+      formData.append('tags', tags);
+      formData.append('filename', filename);
       // 使用 XMLHttpRequest 以便获取上传进度
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -106,7 +124,7 @@ function AppContent() {
               setPage(1);
               setSearch('');
               setSearchInput('');
-              fetchHistory(1, limit, '');
+              fetchHistory(1, limit, '', tagFilter, filenameFilter);
               resolve();
             } else {
               setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
@@ -152,6 +170,53 @@ function AppContent() {
     } catch {
       setToast({ message: '复制失败', type: 'error' });
     }
+  };
+
+  // 多选操作
+  const handleSelect = (file_id: string, checked: boolean) => {
+    setSelected(prev => checked ? [...prev, file_id] : prev.filter(id => id !== file_id));
+  };
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) setSelected(history.map(i => i.file_id));
+    else setSelected([]);
+  };
+  // 批量删除
+  const handleBatchDelete = async () => {
+    if (selected.length === 0) return;
+    if (!window.confirm('确定要删除选中的图片记录吗？')) return;
+    try {
+      const res = await fetch('/api/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selected })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        setToast({ message: '删除成功', type: 'success' });
+        setSelected([]);
+        fetchHistory(page, limit, search, tagFilter, filenameFilter);
+      } else {
+        setToast({ message: '删除失败', type: 'error' });
+      }
+    } catch {
+      setToast({ message: '删除失败', type: 'error' });
+    }
+  };
+  // 批量导出
+  const handleBatchExport = () => {
+    if (selected.length === 0) return;
+    const exportData = history.filter(i => selected.includes(i.file_id));
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'export.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  // 缩略图/原图切换
+  const handleToggleImage = (file_id: string) => {
+    setShowOriginal(prev => ({ ...prev, [file_id]: !prev[file_id] }));
   };
 
   return (
@@ -202,6 +267,32 @@ function AppContent() {
               </div>
             )}
           </div>
+          {/* 标签输入 */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-700">标签：</label>
+            <input
+              className="border rounded px-2 py-1 flex-1"
+              type="text"
+              name="tags"
+              placeholder="多个标签用逗号分隔"
+              value={tags}
+              onChange={e => setTags(e.target.value)}
+            />
+          </div>
+          {/* 文件名输入 */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-700">文件名：</label>
+            <input
+              className="border rounded px-2 py-1 flex-1"
+              type="text"
+              name="filename"
+              placeholder="自定义文件名"
+              value={filename}
+              onChange={handleFilenameChange}
+              maxLength={64}
+            />
+            <span className="text-xs text-gray-400">仅字母数字._-</span>
+          </div>
           {/* 有效期选择 */}
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-700">有效期：</label>
@@ -245,15 +336,32 @@ function AppContent() {
       {/* 历史记录区域 */}
       <div className="mt-8 sm:mt-12 max-w-3xl mx-auto">
         <h2 className="text-xl sm:text-2xl font-semibold mb-4">上传历史记录</h2>
-        {/* 搜索栏 */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
+        {/* 筛选栏 */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="标签筛选"
+            className="border rounded px-2 py-1"
+            value={tagFilter}
+            onChange={e => setTagFilter(e.target.value)}
+            style={{ width: 120 }}
+          />
+          <input
+            type="text"
+            placeholder="文件名筛选"
+            className="border rounded px-2 py-1"
+            value={filenameFilter}
+            onChange={e => setFilenameFilter(e.target.value)}
+            style={{ width: 120 }}
+          />
           <input
             type="text"
             placeholder="搜索 file_id 或 chat_id"
-            className="border rounded px-3 py-2 w-full max-w-xs"
+            className="border rounded px-2 py-1"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={handleSearchKeyDown}
+            style={{ width: 180 }}
           />
           <button
             className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
@@ -262,6 +370,13 @@ function AppContent() {
           >
             搜索
           </button>
+        </div>
+        {/* 批量操作栏 */}
+        <div className="flex items-center gap-2 mb-2">
+          <input type="checkbox" checked={selected.length === history.length && history.length > 0} onChange={e => handleSelectAll(e.target.checked)} />
+          <span className="text-sm">全选</span>
+          <button className="px-2 py-1 bg-red-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
+          <button className="px-2 py-1 bg-green-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchExport}>导出JSON</button>
         </div>
         {/* 分页按钮 */}
         <div className="flex items-center justify-between mb-2">
@@ -287,22 +402,30 @@ function AppContent() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {history.map(item => {
-              // 兼容老数据
               const shortUrl = `${SHORTLINK_DOMAIN || window.location.origin}/img/${item.short_code || ''}`;
               const md = `![](${shortUrl})`;
               const html = `<img src=\"${shortUrl}\" />`;
+              const isChecked = selected.includes(item.file_id);
+              const isShowOriginal = showOriginal[item.file_id];
               return (
                 <div key={item.id} className="border rounded-lg p-4 flex flex-col gap-2 hover:shadow-md transition-shadow bg-white">
                   <div className="flex items-center gap-3">
+                    <input type="checkbox" checked={isChecked} onChange={e => handleSelect(item.file_id, e.target.checked)} />
                     <img 
-                      src={`/api/get_photo/${item.file_id}`} 
+                      src={`/api/get_photo/${item.file_id}${isShowOriginal ? '' : '?thumb=1'}`}
                       alt="History preview" 
-                      className="w-20 h-20 object-cover rounded"
+                      className="w-20 h-20 object-cover rounded cursor-pointer"
+                      onClick={() => handleToggleImage(item.file_id)}
                       onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/100?text=加载失败'}
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate max-w-[200px]">{item.file_id}</p>
                       <p className="text-xs text-gray-500">{new Date(item.created_at).toLocaleString()}</p>
+                      {item.filename && <p className="text-xs text-blue-600">文件名: {item.filename}</p>}
+                      {item.tags && <p className="text-xs text-green-600">标签: {item.tags}</p>}
+                      <button className="text-xs text-blue-500 underline mt-1" onClick={() => handleToggleImage(item.file_id)} type="button">
+                        {isShowOriginal ? '查看缩略图' : '查看原图'}
+                      </button>
                     </div>
                   </div>
                   {/* 短链展示与复制 */}

@@ -4,5 +4,7 @@ CREATE TABLE IF NOT EXISTS images (
   chat_id TEXT NOT NULL,
   short_code TEXT UNIQUE NOT NULL,
   expire_at TIMESTAMP,
+  tags TEXT,
+  filename TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

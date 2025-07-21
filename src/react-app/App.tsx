@@ -256,9 +256,6 @@ function AppContent() {
     setSearch(searchInput.trim());
   };
   // 回车搜索
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleSearch();
-  };
   // 分页按钮
   const handlePrevPage = () => { if (page > 1) setPage(page - 1); };
   const handleNextPage = () => { if (history.length === limit) setPage(page + 1); };

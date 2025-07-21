@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
+import indexHtml from '../../index.html?raw';
 
 type Bindings = {
   TG_BOT_TOKEN: string;
@@ -237,4 +238,10 @@ app.get('/api/test-db', async (c) => {
     }, { status: 500 });
   }
 });
+
+// 兜底路由，返回前端 index.html
+app.get('/*', (c) => {
+  return c.html(indexHtml);
+});
+
 export default app;

@@ -47,8 +47,9 @@ function AppContent() {
   const [logs, setLogs] = useState<any[]>([]);
   const [logsPage, setLogsPage] = useState(1);
   const [logsLoading, setLogsLoading] = useState(false);
-  const [tab, setTab] = useState<'upload'|'gallery'|'logs'|'settings'>('upload');
-  const [lastTab, setLastTab] = useState(tab);
+  type TabType = 'upload' | 'gallery' | 'logs' | 'settings';
+  const [tab, setTab] = useState<TabType>('upload');
+  const [lastTab, setLastTab] = useState<TabType>(tab);
   const [fade, setFade] = useState(true);
   const [settings, setSettings] = useState<any>(null);
 
@@ -359,117 +360,109 @@ function AppContent() {
         <div className={`fade-content${fade ? '' : ' fade-content-leave'}`} key={tab}>
           {tab==='upload' && (
             <div className="card card-hover mb-8">
-              <div
-                ref={dropRef}
-                className="max-w-md mx-auto bg-white rounded-lg shadow-md p-4 sm:p-6 border-2 border-dashed border-gray-300 hover:border-blue-400 transition"
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                style={{ minHeight: 180 }}
-              >
-                <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
-                  {/* 拖拽/粘贴/多选上传区域 */}
-                  <div className="space-y-2 flex flex-col items-center">
-                    <label
-                      htmlFor="photo"
-                      className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md border border-gray-300 transition duration-300 flex items-center justify-center cursor-pointer"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                      </svg>
-                      选择图片（可多选/拖拽/粘贴）
-                      <input
-                        type="file"
-                        id="photo"
-                        name="photo"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={handleFileChange}
-                        ref={fileInputRef}
-                      />
-                    </label>
-                    {files.length > 0 && (
-                      <div className="w-full flex flex-wrap gap-2 mt-2">
-                        {files.map((file, idx) => (
-                          <div key={idx} className="flex flex-col items-center border rounded p-2 bg-gray-50">
-                            <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" />
-                            <span className="text-xs break-all max-w-[80px]">{file.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {/* 压缩选项 */}
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" id="compress" checked={compress} onChange={e => setCompress(e.target.checked)} />
-                    <label htmlFor="compress" className="text-sm text-gray-700">上传前压缩图片</label>
-                  </div>
-                  {/* 标签输入 */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-700">标签：</label>
+              <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
+                {/* 拖拽/粘贴/多选上传区域 */}
+                <div className="space-y-2 flex flex-col items-center">
+                  <label
+                    htmlFor="photo"
+                    className="w-full bg-[#232b36] hover:bg-[#232b36]/80 text-gray-200 font-medium py-2 px-4 rounded-md border border-[#232b36] transition duration-300 flex items-center justify-center cursor-pointer"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                    </svg>
+                    选择图片（可多选/拖拽/粘贴）
                     <input
-                      className="border rounded px-2 py-1 flex-1"
-                      type="text"
-                      name="tags"
-                      placeholder="多个标签用逗号分隔"
-                      value={tags}
-                      onChange={e => setTags(e.target.value)}
+                      type="file"
+                      id="photo"
+                      name="photo"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileChange}
+                      ref={fileInputRef}
                     />
-                  </div>
-                  {/* 文件名输入 */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-700">文件名：</label>
-                    <input
-                      className="border rounded px-2 py-1 flex-1"
-                      type="text"
-                      name="filename"
-                      placeholder="自定义文件名"
-                      value={filename}
-                      onChange={e => setFilename(sanitizeFilename(e.target.value))}
-                      maxLength={64}
-                    />
-                    <span className="text-xs text-gray-400">仅字母数字._-</span>
-                  </div>
-                  {/* 有效期选择 */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-700">有效期：</label>
-                    <select
-                      className="border rounded px-2 py-1"
-                      value={expire}
-                      onChange={e => setExpire(e.target.value)}
-                      name="expire"
-                    >
-                      <option value="forever">永久</option>
-                      <option value="1">1天</option>
-                      <option value="7">7天</option>
-                      <option value="30">30天</option>
-                    </select>
-                  </div>
-                  {/* 上传进度条 */}
-                  {pending && (
-                    <div className="w-full h-3 bg-gray-200 rounded overflow-hidden animate-pulse">
-                      <div
-                        className="h-full bg-blue-500 transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
+                  </label>
+                  {files.length > 0 && (
+                    <div className="w-full flex flex-wrap gap-2 mt-2">
+                      {files.map((file, idx) => (
+                        <div key={idx} className="flex flex-col items-center border rounded p-2 bg-[#232b36]">
+                          <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" />
+                          <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  <div className="pt-2">
-                    <button
-                      type="submit"
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
-                      disabled={pending || files.length === 0}
-                    >
-                      {pending ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                          批量上传中...
-                        </span>
-                      ) : '批量上传'}
-                    </button>
+                </div>
+                {/* 压缩选项 */}
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="compress" checked={compress} onChange={e => setCompress(e.target.checked)} />
+                  <label htmlFor="compress" className="text-sm text-gray-300">上传前压缩图片</label>
+                </div>
+                {/* 标签输入 */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-300">标签：</label>
+                  <input
+                    className="border rounded px-2 py-1 flex-1 bg-[#232b36] text-gray-100"
+                    type="text"
+                    name="tags"
+                    placeholder="多个标签用逗号分隔"
+                    value={tags}
+                    onChange={e => setTags(e.target.value)}
+                  />
+                </div>
+                {/* 文件名输入 */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-300">文件名：</label>
+                  <input
+                    className="border rounded px-2 py-1 flex-1 bg-[#232b36] text-gray-100"
+                    type="text"
+                    name="filename"
+                    placeholder="自定义文件名"
+                    value={filename}
+                    onChange={e => setFilename(sanitizeFilename(e.target.value))}
+                    maxLength={64}
+                  />
+                  <span className="text-xs text-gray-400">仅字母数字._-</span>
+                </div>
+                {/* 有效期选择 */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-300">有效期：</label>
+                  <select
+                    className="border rounded px-2 py-1 bg-[#232b36] text-gray-100"
+                    value={expire}
+                    onChange={e => setExpire(e.target.value)}
+                    name="expire"
+                  >
+                    <option value="forever">永久</option>
+                    <option value="1">1天</option>
+                    <option value="7">7天</option>
+                    <option value="30">30天</option>
+                  </select>
+                </div>
+                {/* 上传进度条 */}
+                {pending && (
+                  <div className="w-full h-3 bg-gray-700 rounded overflow-hidden animate-pulse">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
                   </div>
-                </form>
-              </div>
+                )}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                    disabled={pending || files.length === 0}
+                  >
+                    {pending ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                        批量上传中...
+                      </span>
+                    ) : '批量上传'}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
           {tab==='gallery' && (

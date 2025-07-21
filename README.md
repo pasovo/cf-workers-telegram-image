@@ -1,3 +1,11 @@
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button?projectName=cf-workers-telegram-image)](https://deploy.workers.cloudflare.com/?url=https://github.com/pasovo/cf-workers-telegram-image)
+
+> 部署后请在 Cloudflare 控制台设置以下环境变量：
+> - TG_BOT_TOKEN
+> - TG_CHAT_ID
+> - ADMIN_USER
+> - ADMIN_PASS
+
 # Sasovo Cloudflare Workers 图床
 
 > 基于 Cloudflare Workers + Telegram Bot 的免费图片直链/图床系统，支持多文件上传、批量管理、标签分类、现代美观 UI。
@@ -64,15 +72,23 @@
 
 ---
 
-## 🗄️ 数据库升级说明
+## 🗄️ 数据库初始化
 
-如遇 `no such column` 或 `no such table` 报错，请在 D1 控制台依次执行：
+首次部署后，请在 Cloudflare D1 控制台执行以下 SQL 以初始化表结构：
 
 ```sql
-ALTER TABLE images ADD COLUMN tags TEXT;
-ALTER TABLE images ADD COLUMN filename TEXT;
-ALTER TABLE images ADD COLUMN size INTEGER;
-ALTER TABLE images ADD COLUMN visit_count INTEGER DEFAULT 0;
+CREATE TABLE IF NOT EXISTS images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_id TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  short_code TEXT UNIQUE NOT NULL,
+  expire_at TIMESTAMP,
+  tags TEXT,
+  filename TEXT,
+  size INTEGER,
+  visit_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 ---

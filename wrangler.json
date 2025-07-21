@@ -7,17 +7,5 @@
   "observability": {
     "enabled": true
   },
-  "upload_source_maps": true,
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "telegram_image_db",
-      "database_id": "dd41b8a9-6ab1-443c-ac9f-533ccf1957d3"
-    }
-  ]
-  // 如需环境变量请取消注释并填写
-  // "vars": {
-  //   "TG_BOT_TOKEN": "",
-  //   "TG_CHAT_ID": ""
-  // }
+  "upload_source_maps": true
 }

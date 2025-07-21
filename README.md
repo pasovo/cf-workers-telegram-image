@@ -1,7 +1,7 @@
 # Sasovo Cloudflare Workers 图床
 
 > 基于 Cloudflare Workers + Telegram Bot 的免费图片直链/图床系统，支持多文件上传、批量管理、标签分类、访问统计、日志审计、现代美观 UI。
-
+[感谢原项目,根据此项目修改而来](https://github.com/houhoz/cf-workers-telegram-image)
 ![screenshot](./preview.png)
 
 ---

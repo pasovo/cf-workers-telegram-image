@@ -58,7 +58,7 @@ function AppContent() {
   const [imgInfo, setImgInfo] = useState<{ width: number; height: number; size: number }>({ width: 0, height: 0, size: 0 });
 
   // 标签按钮相关
-  const [tagOptions, setTagOptions] = useState<string[]>(['二次元', '风景', '插画', '摄影']);
+  const [tagOptions, setTagOptions] = useState<string[]>(['默认']);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -106,6 +106,12 @@ function AppContent() {
           limit: data.pagination.limit,
           total: data.pagination.total
         });
+        // 提取所有图片的标签
+        const allTags = data.data
+          .map((item: any) => (item.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean))
+          .flat();
+        const uniqueTags = Array.from(new Set(allTags)) as string[];
+        setTagOptions(uniqueTags.length > 0 ? uniqueTags : ['默认']);
       }
     } catch (error) {
       setToast({ message: '加载历史记录失败，请刷新页面重试', type: 'error' });
@@ -203,7 +209,8 @@ function AppContent() {
       const formData = new FormData();
       formData.append('photo', uploadFile);
       formData.append('expire', expire);
-      formData.append('tags', selectedTags.join(','));
+      const tagsToUpload = selectedTags.length > 0 ? selectedTags : ['默认'];
+      formData.append('tags', tagsToUpload.join(','));
       formData.append('filename', uploadFile.name);
       try {
         await new Promise<void>((resolve, reject) => {
@@ -540,38 +547,16 @@ function AppContent() {
                 <h2 className="text-xl sm:text-2xl font-semibold mb-4">图库</h2>
                 {/* 筛选栏 */}
                 <div className="flex flex-wrap gap-2 mb-4">
-                  <input
-                    type="text"
-                    placeholder="标签筛选"
-                    className="border rounded px-2 py-1"
-                    value={tagFilter}
-                    onChange={e => setTagFilter(e.target.value)}
-                    style={{ width: 120 }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="文件名筛选"
-                    className="border rounded px-2 py-1"
-                    value={filenameFilter}
-                    onChange={e => setFilenameFilter(e.target.value)}
-                    style={{ width: 120 }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="搜索 file_id 或 chat_id"
-                    className="border rounded px-2 py-1"
-                    value={searchInput}
-                    onChange={e => setSearchInput(e.target.value)}
-                    onKeyDown={handleSearchKeyDown}
-                    style={{ width: 180 }}
-                  />
-                  <button
-                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                    onClick={handleSearch}
-                    type="button"
-                  >
-                    搜索
-                  </button>
+                  {tagOptions.map(tag => (
+                    <button
+                      key={tag}
+                      type="button"
+                      className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${tagFilter === tag ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                      onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
+                    >
+                      {tag}
+                    </button>
+                  ))}
                 </div>
                 {/* 批量操作栏 */}
                 <div className="flex items-center gap-2 mb-2">
@@ -613,7 +598,7 @@ function AppContent() {
                         key={item.id}
                         src={`/api/get_photo/${item.file_id}?thumb=1`}
                         alt={item.file_id}
-                        className="w-full aspect-square object-cover rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36]"
+                        className="w-full object-contain max-h-64 rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36]"
                         onClick={() => openModal(item)}
                         onError={e => (e.currentTarget.src = 'https://via.placeholder.com/200?text=加载失败')}
                       />
@@ -667,6 +652,8 @@ function AppContent() {
                   <ul className="text-sm text-gray-100 space-y-2">
                     {/* <li><b>短链域名：</b>{settings.domain}</li> */}
                     {/* <li><b>Telegram Chat ID：</b>{settings.chat_id}</li> */}
+                    <li><b>页面标题：</b>（可自定义输入）</li>
+                    <li><b>网站图标：</b>（可上传favicon.ico，建议尺寸32x32）</li>
                     <li><b>图片总数：</b>{settings.total}</li>
                     <li><b>空间占用：</b>{(settings.size/1024/1024).toFixed(2)} MB</li>
                   </ul>

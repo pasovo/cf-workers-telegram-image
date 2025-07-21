@@ -41,25 +41,42 @@ function AppContent() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string }>>([]);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(8); // 每页条数
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [pagination, setPagination] = useState({ page: 1, limit: 8, total: 0 });
+  const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        const response = await fetch('/api/history');
-        if (!response.ok) throw new Error('获取历史记录失败');
-        const data = await response.json();
-        if (data.status === 'success') {
-          setHistory(data.data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch history:', error);
-        alert('加载历史记录失败，请刷新页面重试');
+  const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '') => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(pageNum), limit: String(limitNum) });
+      if (searchVal) params.append('search', searchVal);
+      const response = await fetch(`/api/history?${params.toString()}`);
+      if (!response.ok) throw new Error('获取历史记录失败');
+      const data = await response.json();
+      if (data.status === 'success') {
+        setHistory(data.data);
+        setPagination({
+          page: data.pagination.page,
+          limit: data.pagination.limit,
+          total: data.pagination.total
+        });
       }
-    };
+    } catch (error) {
+      console.error('Failed to fetch history:', error);
+      alert('加载历史记录失败，请刷新页面重试');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchHistory();
-  }, []);
+  useEffect(() => {
+    fetchHistory(page, limit, search);
+    // eslint-disable-next-line
+  }, [page, limit, search]);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -91,7 +108,10 @@ function AppContent() {
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
-        window.location.reload();
+        setPage(1);
+        setSearch('');
+        setSearchInput('');
+        fetchHistory(1, limit, '');
       } else {
         alert(`上传失败: ${res.message || '未知错误'}`);
       }
@@ -101,6 +121,27 @@ function AppContent() {
     } finally {
       setPending(false);
     }
+  };
+
+  // 搜索按钮点击
+  const handleSearch = () => {
+    setPage(1);
+    setSearch(searchInput.trim());
+  };
+
+  // 回车搜索
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
+  // 分页按钮
+  const handlePrevPage = () => {
+    if (page > 1) setPage(page - 1);
+  };
+  const handleNextPage = () => {
+    if (history.length === limit) setPage(page + 1);
   };
 
   return (
@@ -169,7 +210,41 @@ function AppContent() {
       {/* 历史记录区域 */}
       <div className="mt-12 max-w-3xl mx-auto">
         <h2 className="text-2xl font-semibold mb-4">上传历史记录</h2>
-        {history.length === 0 ? (
+        {/* 搜索栏 */}
+        <div className="flex items-center gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="搜索 file_id 或 chat_id"
+            className="border rounded px-3 py-2 w-full max-w-xs"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+          />
+          <button
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            onClick={handleSearch}
+            type="button"
+          >
+            搜索
+          </button>
+        </div>
+        {/* 分页按钮 */}
+        <div className="flex items-center justify-between mb-2">
+          <button
+            className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+            onClick={handlePrevPage}
+            disabled={page === 1 || loading}
+          >上一页</button>
+          <span>第 {pagination.page} 页</span>
+          <button
+            className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+            onClick={handleNextPage}
+            disabled={history.length < limit || loading}
+          >下一页</button>
+        </div>
+        {loading ? (
+          <p className="text-gray-500 text-center py-6">加载中...</p>
+        ) : history.length === 0 ? (
           <p className="text-gray-500 text-center py-6">暂无上传记录</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

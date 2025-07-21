@@ -81,6 +81,16 @@ npm run deploy
 |---------|------|
 | `TG_BOT_TOKEN` | Telegram Bot 的 API Token，可以从 [@BotFather](https://t.me/BotFather) 获取 |
 | `TG_CHAT_ID` | 目标 Telegram 频道或群组的 ID，可以使用 [@userinfobot](https://t.me/userinfobot) 获取 |
+D1数据库
+
+```sql
+CREATE TABLE IF NOT EXISTS images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_id TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
 ### Telegram Bot 设置
 

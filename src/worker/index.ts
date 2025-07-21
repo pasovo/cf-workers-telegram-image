@@ -125,15 +125,22 @@ app.post('/api/upload', async (c) => {
 // 新增：获取历史记录API
 app.get('/api/history', async (c) => {
   try {
-    // 添加分页参数
-    const { page = '1', limit = '20' } = c.req.query();
+    // 添加分页和搜索参数
+    const { page = '1', limit = '20', search = '' } = c.req.query();
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 20;
     const offset = (pageNum - 1) * limitNum;
 
-    const { results } = await c.env.DB.prepare(
-      'SELECT * FROM images ORDER BY created_at DESC LIMIT ? OFFSET ?'
-    ).bind(limitNum, offset).all();
+    let sql = 'SELECT * FROM images';
+    let params: any[] = [];
+    if (search) {
+      sql += ' WHERE file_id LIKE ? OR chat_id LIKE ?';
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    params.push(limitNum, offset);
+
+    const { results } = await c.env.DB.prepare(sql).bind(...params).all();
 
     return c.json({
       status: 'success',
@@ -141,7 +148,7 @@ app.get('/api/history', async (c) => {
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total: results.length
+        total: results.length // 注意：这里只返回当前页数量，如需总数可再查 COUNT(*)
       }
     });
   } catch (error) {

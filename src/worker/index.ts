@@ -107,7 +107,7 @@ app.post('/api/upload', async (c) => {
         console.error('数据库插入错误:', dbError);
         return c.json({
             status: 'error',
-            message: '\u4fdd\u5b58\u8bb0\u5f55\u5931\u8d25',
+            message: '保存记录失败',
             details: dbError instanceof Error ? dbError.message : String(dbError)
         }, { status: 500 });
     }

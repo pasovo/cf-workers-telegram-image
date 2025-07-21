@@ -78,7 +78,6 @@ app.post('/api/upload', async (c) => {
     if (!response.ok) {
       const errorDetails = await response.text();
       console.error('Telegram API错误:', errorDetails);
-      const statusCode = Number(response.status) || 500;
       return c.json({
         status: 'error',
         message: 'Telegram API\u8c03\u7528\u5931\u8d25',

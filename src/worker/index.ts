@@ -170,7 +170,7 @@ app.post('/api/delete', async (c) => {
     }
     return c.json({ status: 'success' });
   } catch (error) {
-    return c.json({ status: 'error', message: '删除失败' }, { status: 500 });
+    return c.json({ status: 'error', message: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 });
 // /img/:short_code 直链访问，计数+日志

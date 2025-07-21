@@ -5,6 +5,7 @@
 > - TG_CHAT_ID
 > - ADMIN_USER
 > - ADMIN_PASS
+> - SHORTLINK_DOMAIN （可选）
 
 # Sasovo Cloudflare Workers 图床
 
@@ -33,7 +34,7 @@
    - 创建 Bot 并获取 Token，获取你的 Chat ID
 
 2. **配置环境变量**
-   - 在 wrangler.json 中配置 `TG_BOT_TOKEN`、`TG_CHAT_ID`，可选 `SHORTLINK_DOMAIN`
+   - 在 wrangler.json 中配置 `TG_BOT_TOKEN`、`TG_CHAT_ID`、`ADMIN_USER`、`ADMIN_PASS`，可选 `SHORTLINK_DOMAIN`
 
 3. **初始化数据库**
    - 执行 schema.sql 创建/升级 images 表：
@@ -67,9 +68,10 @@
 ## ⚙️ 环境变量说明
 
 - `TG_BOT_TOKEN`：Telegram Bot Token
-- `TG_CHAT_ID`：图片发送目标 Chat ID
+- `TG_CHAT_ID`：图片发送目标的群组链接
+- `ADMIN_USER`：用户名
+- `ADMIN_PASS`：密码
 - `SHORTLINK_DOMAIN`：自定义短链域名（如 img.sasovo.top，可选）
-
 ---
 
 ## 🗄️ 数据库初始化

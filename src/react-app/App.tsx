@@ -52,6 +52,7 @@ function AppContent() {
   const closeModal = () => { setModalOpen(false); setModalItem(null); };
   // 图片详细信息弹窗尺寸和大小
   const [imgInfo, setImgInfo] = useState<{ width: number; height: number; size: number }>({ width: 0, height: 0, size: 0 });
+  const [selectMode, setSelectMode] = useState(false);
 
   // 标签按钮相关
   const [tagOptions, setTagOptions] = useState<string[]>(['默认']);
@@ -555,13 +556,20 @@ function AppContent() {
                 <div className="flex items-center gap-2 mb-2">
                   <button
                     type="button"
-                    className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${selected.length === history.length && history.length > 0 ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
-                    onClick={() => handleSelectAll(!(selected.length === history.length && history.length > 0))}
-                  >
-                    {selected.length === history.length && history.length > 0 ? '✓ ' : ''}全选
-                  </button>
-                  <button className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-gray-100 hover:border-cyan-400 disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
-                  <button className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-gray-100 hover:border-cyan-400 disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchExport}>导出JSON</button>
+                    className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${selectMode ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                    onClick={() => setSelectMode(v => !v)}
+                  >{selectMode ? '取消选择' : '选择'}</button>
+                  {selectMode && (
+                    <>
+                      <button
+                        type="button"
+                        className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${selected.length === history.length && history.length > 0 ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                        onClick={() => handleSelectAll(!(selected.length === history.length && history.length > 0))}
+                      >{selected.length === history.length && history.length > 0 ? '✓ ' : ''}全选</button>
+                      <button className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-gray-100 hover:border-cyan-400 disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
+                      <button className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-gray-100 hover:border-cyan-400 disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchExport}>导出JSON</button>
+                    </>
+                  )}
                 </div>
                 {/* 分页按钮 */}
                 <div className="flex items-center justify-between mb-2">
@@ -587,14 +595,26 @@ function AppContent() {
                 ) : (
                   <div className="w-full grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 max-w-6xl mx-auto">
                     {history.map(item => (
-                      <img
-                        key={item.id}
-                        src={`/api/get_photo/${item.file_id}?thumb=1`}
-                        alt={item.file_id}
-                        className="w-full object-contain max-h-64 rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36]"
-                        onClick={() => openModal(item)}
-                        onError={e => (e.currentTarget.src = 'https://via.placeholder.com/200?text=加载失败')}
-                      />
+                      <div key={item.id} className="relative group">
+                        {selectMode && (
+                          <input
+                            type="checkbox"
+                            checked={selected.includes(item.file_id)}
+                            onChange={e => {
+                              if (e.target.checked) setSelected(prev => [...prev, item.file_id]);
+                              else setSelected(prev => prev.filter(id => id !== item.file_id));
+                            }}
+                            className="absolute top-2 left-2 z-10 w-5 h-5 accent-cyan-500 bg-[#232b36] border border-cyan-400 rounded shadow"
+                          />
+                        )}
+                        <img
+                          src={`/api/get_photo/${item.file_id}?thumb=1`}
+                          alt={item.file_id}
+                          className={`w-full object-contain max-h-64 rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36] ${selectMode ? 'opacity-80' : ''}`}
+                          onClick={() => !selectMode && openModal(item)}
+                          onError={e => (e.currentTarget.src = 'https://via.placeholder.com/200?text=加载失败')}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}

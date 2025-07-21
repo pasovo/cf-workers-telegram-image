@@ -52,6 +52,11 @@ function AppContent() {
   const [lastTab, setLastTab] = useState<TabType>(tab);
   const [fade, setFade] = useState(true);
   const [settings, setSettings] = useState<any>(null);
+  // 瀑布流弹窗相关
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalItem, setModalItem] = useState<any>(null);
+  const openModal = (item: any) => { setModalItem(item); setModalOpen(true); };
+  const closeModal = () => { setModalOpen(false); setModalItem(null); };
 
   // 标签按钮相关
   const [tagOptions, setTagOptions] = useState<string[]>(['二次元', '风景', '插画', '摄影']);
@@ -595,64 +600,17 @@ function AppContent() {
                     <p className="text-gray-500 text-center">暂无上传记录</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {history.map(item => {
-                      const shortUrl = `${SHORTLINK_DOMAIN || window.location.origin}/img/${item.short_code || ''}`;
-                      const md = `![](${shortUrl})`;
-                      const html = `<img src=\"${shortUrl}\" />`;
-                      const isChecked = selected.includes(item.file_id);
-                      const isShowOriginal = showOriginal[item.file_id];
-                      return (
-                        <div key={item.id} className="border rounded-lg p-4 flex flex-col gap-2 hover:shadow-md transition-shadow bg-white">
-                          <div className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              className={`w-6 h-6 rounded border-2 flex items-center justify-center transition ${isChecked ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
-                              onClick={() => handleSelect(item.file_id, !isChecked)}
-                              title={isChecked ? '取消选择' : '选择'}
-                            >
-                              {isChecked ? '✓' : ''}
-                            </button>
-                            <img 
-                              src={`/api/get_photo/${item.file_id}${isShowOriginal ? '' : '?thumb=1'}`}
-                              alt="History preview" 
-                              className="w-20 h-20 object-cover rounded cursor-pointer"
-                              onClick={() => handleToggleImage(item.file_id)}
-                              onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/100?text=加载失败'}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate max-w-[200px]">{item.file_id}</p>
-                              <p className="text-xs text-gray-500">{new Date(item.created_at).toLocaleString()}</p>
-                              {item.filename && <p className="text-xs text-blue-600">文件名: {item.filename}</p>}
-                              {item.tags && <p className="text-xs text-green-600">标签: {item.tags}</p>}
-                              <button className="text-xs text-blue-500 underline mt-1" onClick={() => handleToggleImage(item.file_id)} type="button">
-                                {isShowOriginal ? '查看缩略图' : '查看原图'}
-                              </button>
-                            </div>
-                          </div>
-                          {/* 短链展示与复制 */}
-                          {item.short_code && (
-                            <div className="mt-2 flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">短链：</span>
-                                <a href={shortUrl} target="_blank" rel="noopener" className="text-blue-600 underline break-all">{shortUrl}</a>
-                                <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(shortUrl)} type="button">复制</button>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">Markdown：</span>
-                                <input className="border px-1 py-0.5 text-xs w-36" value={md} readOnly />
-                                <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(md)} type="button">复制</button>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">HTML：</span>
-                                <input className="border px-1 py-0.5 text-xs w-36" value={html} readOnly />
-                                <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(html)} type="button">复制</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                  <div className="w-full grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 max-w-6xl mx-auto">
+                    {history.map(item => (
+                      <img
+                        key={item.id}
+                        src={`/api/get_photo/${item.file_id}?thumb=1`}
+                        alt={item.file_id}
+                        className="w-full aspect-square object-cover rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36]"
+                        onClick={() => openModal(item)}
+                        onError={e => (e.currentTarget.src = 'https://via.placeholder.com/200?text=加载失败')}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -700,7 +658,7 @@ function AppContent() {
                 <h2 className="text-lg font-bold mb-4 text-cyan-400">系统设置</h2>
                 {settings ? (
                   <ul className="text-sm text-gray-100 space-y-2">
-                    <li><b>短链域名：</b>{settings.domain}</li>
+                    {/* <li><b>短链域名：</b>{settings.domain}</li> */}
                     {/* <li><b>Telegram Chat ID：</b>{settings.chat_id}</li> */}
                     <li><b>图片总数：</b>{settings.total}</li>
                     <li><b>空间占用：</b>{(settings.size/1024/1024).toFixed(2)} MB</li>
@@ -710,6 +668,36 @@ function AppContent() {
             </div>
           )}
         </div>
+      {/* 图片详情弹窗 */}
+      {modalOpen && modalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={closeModal}>
+          <div className="bg-[#181f29] rounded-2xl shadow-2xl p-6 w-full max-w-md relative" onClick={e => e.stopPropagation()}>
+            <button className="absolute top-2 right-2 text-gray-400 hover:text-cyan-400 text-2xl" onClick={closeModal}>×</button>
+            <img src={`/api/get_photo/${modalItem.file_id}`} alt="大图" className="w-full rounded mb-4 bg-[#232b36]" style={{maxHeight: 320, objectFit: 'contain'}} />
+            <div className="space-y-2">
+              <div className="text-base font-bold text-gray-100 truncate">{modalItem.filename || modalItem.file_id}</div>
+              <div className="text-xs text-gray-400">上传时间：{new Date(modalItem.created_at).toLocaleString()}</div>
+              <div className="text-xs text-gray-400">标签：{modalItem.tags || '-'}</div>
+              {modalItem.short_code && (
+                <>
+                  <div className="text-xs text-gray-400">直链：
+                    <a href={`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline break-all ml-1">{`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`}</a>
+                    <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`)}>复制</button>
+                  </div>
+                  <div className="text-xs text-gray-400">Markdown：
+                    <input className="border px-1 py-0.5 text-xs w-36 bg-[#232b36] text-gray-100 ml-1" value={`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`} readOnly />
+                    <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`)}>复制</button>
+                  </div>
+                  <div className="text-xs text-gray-400">HTML：
+                    <input className="border px-1 py-0.5 text-xs w-36 bg-[#232b36] text-gray-100 ml-1" value={`<img src=\"${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}\" />`} readOnly />
+                    <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`<img src=\"${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}\" />`)}>复制</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

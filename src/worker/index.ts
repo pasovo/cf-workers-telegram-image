@@ -32,7 +32,7 @@ function getBaseUrl(env: any, req: any) {
   return env.SHORTLINK_DOMAIN || (host ? `${proto}://${host}` : '');
 }
 
-// 上传图片处理（支持有效期、短链、标签、文件名）
+// 上传图片处理（支持有效期、短链、标签、文件名、统计）
 app.post('/api/upload', async (c) => {
   const { TG_BOT_TOKEN, TG_CHAT_ID, DB } = c.env;
   if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
@@ -96,13 +96,17 @@ app.post('/api/upload', async (c) => {
       }
       // 保存记录到数据库
       try {
+        const size = photoFile.size;
         const stmt = DB.prepare(
-          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename) VALUES (?, ?, ?, ?, ?, ?)' 
+          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename, size) VALUES (?, ?, ?, ?, ?, ?, ?)' 
         );
-        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename).run();
+        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size).run();
         if (!dbResult.success) {
             throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
         }
+        // 写上传日志
+        await DB.prepare('INSERT INTO logs (file_id, type, ip) VALUES (?, ?, ?)')
+          .bind(file_id, 'upload', c.req.header('cf-connecting-ip') || '').run();
       } catch (dbError) {
         console.error('数据库插入错误:', dbError);
         return c.json({
@@ -171,7 +175,7 @@ app.post('/api/delete', async (c) => {
     return c.json({ status: 'error', message: '删除失败' }, { status: 500 });
   }
 });
-// /img/:short_code 直链访问
+// /img/:short_code 直链访问，计数+日志
 app.get('/img/:short_code', async (c) => {
   const { short_code } = c.req.param();
   const { DB } = c.env;
@@ -183,7 +187,12 @@ app.get('/img/:short_code', async (c) => {
   if (row.expire_at && new Date(String(row.expire_at)).getTime() < Date.now()) {
     return c.text('链接已过期', 410);
   }
-  // 只返回原图
+  // 访问计数+1
+  await DB.prepare('UPDATE images SET visit_count = visit_count + 1 WHERE short_code = ?').bind(short_code).run();
+  // 写访问日志
+  await DB.prepare('INSERT INTO logs (file_id, type, ip) VALUES (?, ?, ?)')
+    .bind(row.file_id, 'visit', c.req.header('cf-connecting-ip') || '').run();
+  // 返回原图
   const TG_BOT_TOKEN = c.env.TG_BOT_TOKEN;
   const getFileResponse = await fetch(
     `https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${row.file_id}`
@@ -246,6 +255,48 @@ app.get('/api/history', async (c) => {
       message: error instanceof Error ? error.message : '获取历史记录失败'
     }, { status: 500 });
   }
+});
+
+// 统计API
+app.get('/api/stats', async (c) => {
+  const { DB } = c.env;
+  const total = await DB.prepare('SELECT COUNT(*) as n, COALESCE(SUM(size),0) as size FROM images').first();
+  const hot = await DB.prepare('SELECT * FROM images ORDER BY visit_count DESC LIMIT 5').all();
+  return c.json({
+    status: 'success',
+    total: total?.n || 0,
+    size: total?.size || 0,
+    hot: hot?.results || []
+  });
+});
+// 日志API
+app.get('/api/logs', async (c) => {
+  const { DB } = c.env;
+  const { page = '1', limit = '20' } = c.req.query();
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 20;
+  const offset = (pageNum - 1) * limitNum;
+  const { results } = await DB.prepare('SELECT * FROM logs ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(limitNum, offset).all();
+  return c.json({
+    status: 'success',
+    data: results,
+    pagination: { page: pageNum, limit: limitNum, total: results.length }
+  });
+});
+
+// 设置API
+app.get('/api/settings', async (c) => {
+  const DB = c.env.DB;
+  const SHORTLINK_DOMAIN = (c.env as any).SHORTLINK_DOMAIN;
+  const TG_CHAT_ID = c.env.TG_CHAT_ID;
+  const total = await DB.prepare('SELECT COUNT(*) as n, COALESCE(SUM(size),0) as size FROM images').first();
+  return c.json({
+    status: 'success',
+    domain: SHORTLINK_DOMAIN || '',
+    chat_id: TG_CHAT_ID || '',
+    total: total?.n || 0,
+    size: total?.size || 0
+  });
 });
 
 app.get('/api/test-db', async (c) => {

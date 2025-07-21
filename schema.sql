@@ -6,5 +6,15 @@ CREATE TABLE IF NOT EXISTS images (
   expire_at TIMESTAMP,
   tags TEXT,
   filename TEXT,
+  size INTEGER,
+  visit_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_id TEXT,
+  type TEXT, -- upload, visit
+  ip TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

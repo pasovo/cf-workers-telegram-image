@@ -1,10 +1,11 @@
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 
 // 全局弹窗组件
 function Toast({ message, type = 'info', onClose }: { message: string; type?: 'info' | 'error' | 'success'; onClose: () => void }) {
-  useEffect(() => {
+  // 不再用 useEffect 依赖 ErrorBoundary
+  React.useEffect(() => {
     if (!message) return;
     const timer = setTimeout(onClose, 2500);
     return () => clearTimeout(timer);
@@ -18,38 +19,6 @@ function Toast({ message, type = 'info', onClose }: { message: string; type?: 'i
       {message}
     </div>
   );
-}
-
-// 错误边界组件
-function ErrorBoundary({ children }: { children: React.ReactNode }) {
-  const [hasError, setHasError] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    const handleError = (e: ErrorEvent) => {
-      setHasError(true);
-      setError(e.error);
-      e.preventDefault();
-    };
-    window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
-  }, []);
-
-  if (hasError) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
-        <h2 className="text-2xl text-red-600 mb-4">页面加载出错</h2>
-        <p className="text-gray-700 mb-2">{error?.message}</p>
-        <button 
-          onClick={() => window.location.reload()}
-          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          重新加载
-        </button>
-      </div>
-    );
-  }
-  return <>{children}</>;
 }
 
 function AppContent() {
@@ -92,7 +61,7 @@ function AppContent() {
     }
   };
 
-  useEffect(() => {
+  React.useEffect(() => {
     fetchHistory(page, limit, search);
     // eslint-disable-next-line
   }, [page, limit, search]);

@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
-import indexHtml from '../../index.html?raw';
 
 type Bindings = {
   TG_BOT_TOKEN: string;

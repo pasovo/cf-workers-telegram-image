@@ -57,7 +57,7 @@ function AppContent() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string }>>([]);
+  const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string }>>([]);
   const [page, setPage] = useState(1);
   const [limit] = useState(8);
   const [search, setSearch] = useState('');
@@ -66,6 +66,8 @@ function AppContent() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' }>({ message: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [expire, setExpire] = useState('forever');
+  const SHORTLINK_DOMAIN = (window as any).SHORTLINK_DOMAIN || '';
 
   const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '') => {
     setLoading(true);
@@ -114,6 +116,7 @@ function AppContent() {
     setUploadProgress(0);
     try {
       const formData = new FormData(e.currentTarget);
+      formData.append('expire', expire);
       // 使用 XMLHttpRequest 以便获取上传进度
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -172,6 +175,16 @@ function AppContent() {
   const handlePrevPage = () => { if (page > 1) setPage(page - 1); };
   const handleNextPage = () => { if (history.length === limit) setPage(page + 1); };
 
+  // 复制短链/Markdown/HTML
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast({ message: '已复制到剪贴板', type: 'success' });
+    } catch {
+      setToast({ message: '复制失败', type: 'error' });
+    }
+  };
+
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-4xl">
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
@@ -219,6 +232,21 @@ function AppContent() {
                 </div>
               </div>
             )}
+          </div>
+          {/* 有效期选择 */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-700">有效期：</label>
+            <select
+              className="border rounded px-2 py-1"
+              value={expire}
+              onChange={e => setExpire(e.target.value)}
+              name="expire"
+            >
+              <option value="forever">永久</option>
+              <option value="1">1天</option>
+              <option value="7">7天</option>
+              <option value="30">30天</option>
+            </select>
           </div>
           {/* 上传进度条 */}
           {pending && (
@@ -289,20 +317,48 @@ function AppContent() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {history.map(item => (
-              <div key={item.id} className="border rounded-lg p-4 flex items-center gap-3 hover:shadow-md transition-shadow bg-white">
-                <img 
-                  src={`/api/get_photo/${item.file_id}`} 
-                  alt="History preview" 
-                  className="w-20 h-20 object-cover rounded"
-                  onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/100?text=加载失败'}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate max-w-[200px]">{item.file_id}</p>
-                  <p className="text-xs text-gray-500">{new Date(item.created_at).toLocaleString()}</p>
+            {history.map(item => {
+              // 兼容老数据
+              const shortUrl = `${SHORTLINK_DOMAIN || window.location.origin}/${item.short_code || ''}`;
+              const md = `![](${shortUrl})`;
+              const html = `<img src=\"${shortUrl}\" />`;
+              return (
+                <div key={item.id} className="border rounded-lg p-4 flex flex-col gap-2 hover:shadow-md transition-shadow bg-white">
+                  <div className="flex items-center gap-3">
+                    <img 
+                      src={`/api/get_photo/${item.file_id}`} 
+                      alt="History preview" 
+                      className="w-20 h-20 object-cover rounded"
+                      onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/100?text=加载失败'}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate max-w-[200px]">{item.file_id}</p>
+                      <p className="text-xs text-gray-500">{new Date(item.created_at).toLocaleString()}</p>
+                    </div>
+                  </div>
+                  {/* 短链展示与复制 */}
+                  {item.short_code && (
+                    <div className="mt-2 flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">短链：</span>
+                        <a href={shortUrl} target="_blank" rel="noopener" className="text-blue-600 underline break-all">{shortUrl}</a>
+                        <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(shortUrl)} type="button">复制</button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">Markdown：</span>
+                        <input className="border px-1 py-0.5 text-xs w-36" value={md} readOnly />
+                        <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(md)} type="button">复制</button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">HTML：</span>
+                        <input className="border px-1 py-0.5 text-xs w-36" value={html} readOnly />
+                        <button className="ml-2 px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200" onClick={() => handleCopy(html)} type="button">复制</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

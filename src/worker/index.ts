@@ -42,45 +42,59 @@ app.get('/api/get_photo/:file_id', async (c) => {
   }
 });
 
+// 工具函数：生成唯一短码
+function genShortCode(length = 7) {
+  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
 
-// 上传图片处理
+// 获取域名配置
+function getBaseUrl(env: any, req: any) {
+  // 优先用环境变量 SHORTLINK_DOMAIN，否则用请求头
+  return env.SHORTLINK_DOMAIN || (req.headers.get('x-forwarded-host') ? `${req.headers.get('x-forwarded-proto') || 'https'}://${req.headers.get('x-forwarded-host')}` : '');
+}
+
+// 上传图片处理（支持有效期和短链）
 app.post('/api/upload', async (c) => {
-  const { TG_BOT_TOKEN, TG_CHAT_ID } = c.env;
-
-  // 添加环境变量检查
+  const { TG_BOT_TOKEN, TG_CHAT_ID, DB } = c.env;
   if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
       return c.json({
           status: 'error',
-          message: '\u73af\u5883\u53d8\u91cf\u914d\u7f6e\u4e0d\u5b8c\u6574',
-          details: 'TG_BOT_TOKEN \u548c TG_CHAT_ID \u5fc5\u987b\u914d\u7f6e'
+          message: '环境变量配置不完整',
+          details: 'TG_BOT_TOKEN 和 TG_CHAT_ID 必须配置'
       }, { status: 500 });
   }
-
   const formData = await c.req.formData();
   const photoFile = formData.get('photo') as File;
-
-  // 添加文件验证
   if (!photoFile || photoFile.size === 0) {
       return c.json({
           status: 'error',
-          message: '\u8bf7\u4e0a\u4f20\u6709\u6548\u7684\u56fe\u7247\u6587\u4ef6'
+          message: '请上传有效的图片文件'
       }, { status: 400 });
   }
-
   formData.append('chat_id', TG_CHAT_ID);
-
+  // 新增：有效期参数
+  const expireOption = formData.get('expire') as string || 'forever';
+  let expire_at: string | null = null;
+  if (expireOption === '1') expire_at = new Date(Date.now() + 86400 * 1000).toISOString();
+  if (expireOption === '7') expire_at = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
+  if (expireOption === '30') expire_at = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  // forever/null 表示永久
   try {
     const response = await fetch(
       `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendPhoto`,
       { method: 'POST', body: formData }
     );
-
     if (!response.ok) {
       const errorDetails = await response.text();
       console.error('Telegram API错误:', errorDetails);
       return c.json({
         status: 'error',
-        message: 'Telegram API\u8c03\u7528\u5931\u8d25',
+        message: 'Telegram API调用失败',
         details: errorDetails
       }, { status: 500 });
     }
@@ -89,36 +103,83 @@ app.post('/api/upload', async (c) => {
       result?: { photo?: Array<{ file_id: string }> };
       description?: string;
     } = await response.json();
-
     if (res.ok && res.result?.photo && res.result.photo.length > 0) {
-        const photo = res.result.photo;
-        const file_id = photo[photo.length - 1].file_id; // 获取最高分辨率图片ID
-      
-      // 新增：保存记录到数据库
+      const photo = res.result.photo;
+      const file_id = photo[photo.length - 1].file_id;
+      // 生成唯一短码
+      let short_code = '';
+      let tryCount = 0;
+      while (true) {
+        short_code = genShortCode();
+        const check = await DB.prepare('SELECT 1 FROM images WHERE short_code = ?').bind(short_code).first();
+        if (!check) break;
+        tryCount++;
+        if (tryCount > 5) throw new Error('短码生成失败，请重试');
+      }
+      // 保存记录到数据库
       try {
-        const stmt = c.env.DB.prepare(
-          'INSERT INTO images (file_id, chat_id) VALUES (?, ?)'
+        const stmt = DB.prepare(
+          'INSERT INTO images (file_id, chat_id, short_code, expire_at) VALUES (?, ?, ?, ?)' 
         );
-        const dbResult = await stmt.bind(file_id, TG_CHAT_ID).run();
+        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at).run();
         if (!dbResult.success) {
             throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
         }
-    } catch (dbError) {
+      } catch (dbError) {
         console.error('数据库插入错误:', dbError);
         return c.json({
             status: 'error',
             message: '保存记录失败',
             details: dbError instanceof Error ? dbError.message : String(dbError)
         }, { status: 500 });
-    }
-      
-      return c.json({ status: 'success', phonos: photo });
+      }
+      // 返回短链
+      const baseUrl = getBaseUrl(c.env, c.req);
+      const shortUrl = baseUrl ? `${baseUrl}/${short_code}` : `/${short_code}`;
+      return c.json({ status: 'success', phonos: photo, short_code, short_url: shortUrl, expire_at });
     } else {
       return c.json({ status: 'error', message: res.description || '上传失败' });
     }
   } catch (error: unknown) {
     console.error(error);
-    return c.json({ status: 'error', message: '\u670d\u52a1\u5668\u9519\u8bef' }, { status: 500 });
+    return c.json({ status: 'error', message: '服务器错误' }, { status: 500 });
+  }
+});
+
+// 根路径短链访问
+app.get('/:short_code', async (c) => {
+  const { short_code } = c.req.param();
+  const { DB } = c.env;
+  // 查找短码
+  const row = await DB.prepare('SELECT file_id, expire_at FROM images WHERE short_code = ?').bind(short_code).first();
+  if (!row) {
+    return c.text('链接不存在', 404);
+  }
+  if (row.expire_at && new Date(String(row.expire_at)).getTime() < Date.now()) {
+    return c.text('链接已过期', 410);
+  }
+  // 代理图片
+  const TG_BOT_TOKEN = c.env.TG_BOT_TOKEN;
+  // 获取 file_path
+  const getFileResponse = await fetch(
+    `https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${row.file_id}`
+  );
+  const getFileRes: any = await getFileResponse.json();
+  if (getFileRes.ok) {
+    const file_path = getFileRes.result.file_path;
+    const imageResponse = await fetch(
+      `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`
+    );
+    const imageRes = await imageResponse.arrayBuffer();
+    return new Response(imageRes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=31536000'
+      },
+    });
+  } else {
+    return c.text('图片获取失败', 404);
   }
 });
 

@@ -367,17 +367,20 @@ function AppContent() {
     <div className="min-h-screen bg-[#10151b]">
       {/* 顶部导航栏 */}
       <nav className="w-full flex items-center justify-between px-6 py-3 bg-[#181f29] shadow-lg sticky top-0 z-40">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-[120px]">
           <span className="text-cyan-400 font-bold text-xl tracking-wider flex items-center gap-2">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#22d3ee" strokeWidth="2"/><path d="M8 12l2.5 2.5L16 9" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             sasovo
           </span>
         </div>
-        <div className="flex gap-2">
-          <button className={tab==='upload' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('upload')}>上传</button>
-          <button className={tab==='gallery' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('gallery')}>图库</button>
-          <button className={tab==='settings' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('settings')}>设置</button>
+        <div className="flex-1 flex justify-center">
+          <div className="flex gap-2">
+            <button className={tab==='upload' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('upload')}>上传</button>
+            <button className={tab==='gallery' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('gallery')}>图库</button>
+            <button className={tab==='settings' ? 'nav-btn nav-btn-active' : 'nav-btn'} onClick={()=>setTab('settings')}>设置</button>
+          </div>
         </div>
+        <div className="min-w-[120px]"></div>
       </nav>
       {/* Banner区块已移除 */}
       <div className="container mx-auto max-w-4xl px-2 sm:px-4 py-8">
@@ -489,20 +492,22 @@ function AppContent() {
                   )}
                 </div>
                 {/* 有效期选择 */}
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-300">有效期：</label>
-                  <select
-                    className="border rounded px-2 py-1 bg-[#232b36] text-gray-100"
-                    value={expire}
-                    onChange={e => setExpire(e.target.value)}
-                    name="expire"
+                <span className="text-sm text-gray-300">有效期：</span>
+                {[
+                  { label: '永久', value: 'forever' },
+                  { label: '1天', value: '1' },
+                  { label: '7天', value: '7' },
+                  { label: '30天', value: '30' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 mr-2 mb-1 ${expire === opt.value ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                    onClick={() => setExpire(opt.value)}
                   >
-                    <option value="forever">永久</option>
-                    <option value="1">1天</option>
-                    <option value="7">7天</option>
-                    <option value="30">30天</option>
-                  </select>
-                </div>
+                    {expire === opt.value ? '✓ ' : ''}{opt.label}
+                  </button>
+                ))}
                 {/* 上传进度条 */}
                 {pending && (
                   <div className="w-full h-3 bg-gray-700 rounded overflow-hidden animate-pulse">
@@ -624,7 +629,7 @@ function AppContent() {
                     <li className="flex items-center gap-2"><b>网站图标：</b>
                       <input
                         type="file"
-                        accept="image/x-icon,.ico"
+                        accept="image/x-icon,.ico,image/svg+xml,.svg,image/png,.png,image/jpeg,.jpg,.jpeg,image/gif,.gif,image/bmp,.bmp,image/webp,.webp"
                         onChange={e => setFaviconFile(e.target.files?.[0] || null)}
                         className="text-xs"
                       />
@@ -672,12 +677,12 @@ function AppContent() {
                     <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`)}>复制</button>
                   </div>
                   <div className="text-xs text-gray-400">Markdown：
-                    <input className="border px-1 py-0.5 text-xs w-36 bg-[#232b36] text-gray-100 ml-1" value={`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`} readOnly />
+                    <input className="border px-1 py-0.5 text-xs w-60 bg-[#232b36] text-gray-100 ml-1" value={`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`} readOnly />
                     <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`)}>复制</button>
                   </div>
                   <div className="text-xs text-gray-400">HTML：
-                    <input className="border px-1 py-0.5 text-xs w-36 bg-[#232b36] text-gray-100 ml-1" value={`<img src=\"${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}\" />`} readOnly />
-                    <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`<img src=\"${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}\" />`)}>复制</button>
+                    <input className="border px-1 py-0.5 text-xs w-60 bg-[#232b36] text-gray-100 ml-1" value={`<img src="${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}" />`} readOnly />
+                    <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`<img src="${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}" />`)}>复制</button>
                   </div>
                 </>
               )}

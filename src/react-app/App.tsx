@@ -34,10 +34,7 @@ function AppContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expire, setExpire] = useState('forever');
   const SHORTLINK_DOMAIN = (window as any).SHORTLINK_DOMAIN || '';
-  const [tags, setTags] = useState('');
-  const [filename, setFilename] = useState('');
   const [selected, setSelected] = useState<string[]>([]); // 多选 file_id
-  const [showOriginal, setShowOriginal] = useState<{ [file_id: string]: boolean }>({});
   const [tagFilter, setTagFilter] = useState('');
   const [filenameFilter, setFilenameFilter] = useState('');
   const [files, setFiles] = useState<File[]>([]); // 多文件队列
@@ -57,6 +54,8 @@ function AppContent() {
   const [modalItem, setModalItem] = useState<any>(null);
   const openModal = (item: any) => { setModalItem(item); setModalOpen(true); };
   const closeModal = () => { setModalOpen(false); setModalItem(null); };
+  // 图片详细信息弹窗尺寸和大小
+  const [imgInfo, setImgInfo] = useState<{ width: number; height: number; size: number }>({ width: 0, height: 0, size: 0 });
 
   // 标签按钮相关
   const [tagOptions, setTagOptions] = useState<string[]>(['二次元', '风景', '插画', '摄影']);
@@ -90,8 +89,6 @@ function AppContent() {
   }, [tab]);
 
   // 文件名过滤
-  const sanitizeFilename = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_');
-
   const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '', tagVal = '', filenameVal = '') => {
     setLoading(true);
     try {
@@ -207,7 +204,7 @@ function AppContent() {
       formData.append('photo', uploadFile);
       formData.append('expire', expire);
       formData.append('tags', selectedTags.join(','));
-      formData.append('filename', filename ? filename : uploadFile.name);
+      formData.append('filename', uploadFile.name);
       try {
         await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
@@ -270,9 +267,6 @@ function AppContent() {
   };
 
   // 多选操作
-  const handleSelect = (file_id: string, checked: boolean) => {
-    setSelected(prev => checked ? [...prev, file_id] : prev.filter(id => id !== file_id));
-  };
   const handleSelectAll = (checked: boolean) => {
     if (checked) setSelected(history.map(i => i.file_id));
     else setSelected([]);
@@ -311,10 +305,6 @@ function AppContent() {
     a.download = 'export.json';
     a.click();
     URL.revokeObjectURL(url);
-  };
-  // 缩略图/原图切换
-  const handleToggleImage = (file_id: string) => {
-    setShowOriginal(prev => ({ ...prev, [file_id]: !prev[file_id] }));
   };
 
   // 删除待上传图片
@@ -355,6 +345,23 @@ function AppContent() {
     } catch {}
   };
   React.useEffect(() => { if (tab === 'settings') fetchSettings(); }, [tab]);
+
+  // 弹窗打开时获取图片尺寸和大小
+  React.useEffect(() => {
+    if (!modalOpen || !modalItem) return;
+    // 获取尺寸
+    const img = new window.Image();
+    img.onload = () => {
+      setImgInfo(prev => ({ ...prev, width: img.naturalWidth, height: img.naturalHeight }));
+    };
+    img.src = `/api/get_photo/${modalItem.file_id}`;
+    // 获取大小
+    fetch(`/api/get_photo/${modalItem.file_id}`)
+      .then(res => {
+        const size = Number(res.headers.get('content-length')) || 0;
+        setImgInfo(prev => ({ ...prev, size }));
+      });
+  }, [modalOpen, modalItem]);
 
   return (
     <div className="min-h-screen bg-[#10151b]">
@@ -678,6 +685,8 @@ function AppContent() {
               <div className="text-base font-bold text-gray-100 truncate">{modalItem.filename || modalItem.file_id}</div>
               <div className="text-xs text-gray-400">上传时间：{new Date(modalItem.created_at).toLocaleString()}</div>
               <div className="text-xs text-gray-400">标签：{modalItem.tags || '-'}</div>
+              <div className="text-xs text-gray-400">尺寸：{imgInfo.width} × {imgInfo.height}</div>
+              <div className="text-xs text-gray-400">大小：{imgInfo.size > 0 ? (imgInfo.size > 1024*1024 ? (imgInfo.size/1024/1024).toFixed(2)+' MB' : (imgInfo.size/1024).toFixed(1)+' KB') : '-'}</div>
               {modalItem.short_code && (
                 <>
                   <div className="text-xs text-gray-400">直链：

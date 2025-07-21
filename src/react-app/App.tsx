@@ -498,7 +498,7 @@ function AppContent() {
           {tab==='gallery' && (
             <div className="card card-hover mb-8">
               <div className="mt-8 sm:mt-12 max-w-3xl mx-auto">
-                <h2 className="text-xl sm:text-2xl font-semibold mb-4">上传历史记录</h2>
+                <h2 className="text-xl sm:text-2xl font-semibold mb-4">图库</h2>
                 {/* 筛选栏 */}
                 <div className="flex flex-wrap gap-2 mb-4">
                   <input
@@ -543,19 +543,19 @@ function AppContent() {
                   >
                     {selected.length === history.length && history.length > 0 ? '✓ ' : ''}全选
                   </button>
-                  <button className="px-2 py-1 bg-red-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
-                  <button className="px-2 py-1 bg-green-500 text-white rounded disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchExport}>导出JSON</button>
+                  <button className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-gray-100 hover:border-cyan-400 disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
+                  <button className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-gray-100 hover:border-cyan-400 disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchExport}>导出JSON</button>
                 </div>
                 {/* 分页按钮 */}
                 <div className="flex items-center justify-between mb-2">
                   <button
-                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                    className="px-2 py-1 bg-[#232b36] text-gray-100 rounded disabled:opacity-50 hover:border-cyan-400 border-2 border-[#232b36] transition"
                     onClick={handlePrevPage}
                     disabled={page === 1 || loading}
                   >上一页</button>
-                  <span>第 {pagination.page} 页</span>
+                  <span className="text-gray-300">第 {pagination.page} 页</span>
                   <button
-                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                    className="px-2 py-1 bg-[#232b36] text-gray-100 rounded disabled:opacity-50 hover:border-cyan-400 border-2 border-[#232b36] transition"
                     onClick={handleNextPage}
                     disabled={history.length < limit || loading}
                   >下一页</button>

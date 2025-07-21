@@ -37,7 +37,6 @@ function AppContent() {
   const [tagFilter, setTagFilter] = useState('');
   const [filenameFilter] = useState('');
   const [files, setFiles] = useState<File[]>([]); // 多文件队列
-  const [compress, setCompress] = useState(false); // 是否压缩
   const [stats, setStats] = useState<{ total: number; size: number; hot: any[] }>({ total: 0, size: 0, hot: [] });
   const [dragActive, setDragActive] = useState(false);
   type TabType = 'upload' | 'gallery' | 'settings';
@@ -210,14 +209,22 @@ function AppContent() {
         canvas.height = h;
         const ctx = canvas.getContext('2d')!;
         ctx.drawImage(img, 0, 0, w, h);
-        canvas.toBlob(blob => {
-          if (blob) {
-            resolve(new File([blob], file.name, { type: blob.type }));
-          } else {
-            resolve(file);
-          }
-          URL.revokeObjectURL(url);
-        }, file.type, quality);
+        // 多次尝试压缩到10MB以下
+        const tryCompress = (q: number) => {
+          canvas.toBlob(blob => {
+            if (blob) {
+              if (blob.size <= 10 * 1024 * 1024 || q < 0.2) {
+                resolve(new File([blob], file.name, { type: blob.type }));
+              } else {
+                tryCompress(q - 0.1);
+              }
+            } else {
+              resolve(file);
+            }
+            URL.revokeObjectURL(url);
+          }, file.type, q);
+        };
+        tryCompress(quality);
       };
       img.onerror = () => resolve(file);
       img.src = url;
@@ -230,7 +237,14 @@ function AppContent() {
     setPending(true);
     for (const file of files) {
       let uploadFile = file;
-      if (compress) uploadFile = await compressImage(file);
+      if (file.size > 10 * 1024 * 1024) {
+        setToast({ message: '图片大于10MB，自动压缩中...', type: 'info' });
+        uploadFile = await compressImage(file);
+        if (uploadFile.size > 10 * 1024 * 1024) {
+          setToast({ message: '图片压缩后仍大于10MB，无法上传', type: 'error' });
+          continue;
+        }
+      }
       const formData = new FormData();
       formData.append('photo', uploadFile);
       formData.append('expire', expire);
@@ -549,16 +563,6 @@ function AppContent() {
                       ))}
                     </div>
                   )}
-                </div>
-                {/* 压缩选项 */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${compress ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
-                    onClick={() => setCompress(v => !v)}
-                  >
-                    {compress ? '✓ ' : ''}上传前压缩图片
-                  </button>
                 </div>
                 {/* 标签输入 */}
                 <div className="flex items-center gap-2 flex-wrap">

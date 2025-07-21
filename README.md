@@ -1,8 +1,12 @@
 <h1 align="center">Sasovo Cloudflare Workers 图床</h1>
 
 > 基于 Cloudflare Workers + Telegram Bot 的免费图片直链/图床系统，支持多文件上传、批量管理、标签分类、现代美观 UI。
-[感谢原项目,根据此项目修改而来](https://github.com/houhoz/cf-workers-telegram-image)
+> [感谢原项目,根据此项目修改而来](https://github.com/houhoz/cf-workers-telegram-image)
+> 感谢cursor，一个前端苦手发自内心的感谢
 
+## 让cloudflare再次伟大！
+
+项目图片
 ![screenshot](./preview.png)
 
 ---
@@ -20,15 +24,19 @@
 ---
 
 ## 🚀 快速开始
+
 准备工作
-   - 创建 Bot 并获取 Token，并通过@getidbot获取你的 Chat ID
+
+- 创建 Bot 并获取 Token，并通过@getidbot获取你的 Chat ID
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button?projectName=cf-workers-telegram-image)](https://deploy.workers.cloudflare.com/?url=https://github.com/pasovo/cf-workers-telegram-image)
 
 1. **一键部署**
+   
    - 点击上方按钮，登录 Cloudflare 账号，自动 fork 并部署本项目。
 
 2. **配置环境变量**
+   
    - 在 Cloudflare 控制台「设置」-「变量与机密」中，配置以下环境变量：
      - `TG_BOT_TOKEN`：Telegram Bot Token
      - `TG_CHAT_ID`：图片发送目标 Chat ID
@@ -37,7 +45,9 @@
      - `SHORTLINK_DOMAIN`：自定义短链域名（可选）--域名其实写了自动获取，你用什么域名访问就会用什么域名显示直链，但不保证有人有需求所以就保留了
 
 3. **初始化数据库**
+   
    - 首次部署后，请添加一个Cloudflare D1数据库，绑定变量名为DB（重要），数据库名称随意，在控制台执行以下 SQL 以初始化表结构：
+     
      ```sql
      CREATE TABLE IF NOT EXISTS images (
        id INTEGER PRIMARY KEY AUTOINCREMENT,

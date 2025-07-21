@@ -55,7 +55,9 @@ function genShortCode(length = 7) {
 // 获取域名配置
 function getBaseUrl(env: any, req: any) {
   // 优先用环境变量 SHORTLINK_DOMAIN，否则用请求头
-  return env.SHORTLINK_DOMAIN || (req.headers.get('x-forwarded-host') ? `${req.headers.get('x-forwarded-proto') || 'https'}://${req.headers.get('x-forwarded-host')}` : '');
+  const host = req.header('x-forwarded-host');
+  const proto = req.header('x-forwarded-proto') || 'https';
+  return env.SHORTLINK_DOMAIN || (host ? `${proto}://${host}` : '');
 }
 
 // 上传图片处理（支持有效期和短链）

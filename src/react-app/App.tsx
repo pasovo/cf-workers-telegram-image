@@ -46,6 +46,7 @@ function AppContent() {
   const [logs, setLogs] = useState<any[]>([]);
   const [logsPage, setLogsPage] = useState(1);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   type TabType = 'upload' | 'gallery' | 'logs' | 'settings';
   const [tab, setTab] = useState<TabType>('upload');
   const [lastTab, setLastTab] = useState<TabType>(tab);
@@ -124,6 +125,21 @@ function AppContent() {
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
   }, []);
+
+  // 拖拽上传
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(true);
+  };
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+  };
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (e.dataTransfer.files) handleAddFiles(e.dataTransfer.files);
+  };
 
   // 图片压缩（canvas）
   const compressImage = (file: File, quality = 0.7, maxW = 1600, maxH = 1600): Promise<File> => {
@@ -350,7 +366,12 @@ function AppContent() {
         {/* 其余Tab内容卡片化 */}
         <div className={`fade-content${fade ? '' : ' fade-content-leave'}`} key={tab}>
           {tab==='upload' && (
-            <div className="card card-hover mb-8">
+            <div
+              className={`card card-hover mb-8 transition-all duration-200 ${dragActive ? 'ring-4 ring-cyan-400 shadow-2xl' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
               <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
                 {/* 拖拽/粘贴/多选上传区域 */}
                 <div className="space-y-2 flex flex-col items-center">

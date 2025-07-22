@@ -132,6 +132,7 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
 
   // 文件名过滤
   const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '', tagVal = '', filenameVal = '') => {
+    if (!loggedIn) return;
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(pageNum), limit: String(limitNum) });
@@ -168,9 +169,10 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
   };
 
   React.useEffect(() => {
+    if (!loggedIn) return;
     fetchHistory(page, limit, search, tagFilter, filenameFilter);
     // eslint-disable-next-line
-  }, [page, limit, search, tagFilter, filenameFilter]);
+  }, [loggedIn, page, limit, search, tagFilter, filenameFilter]);
 
   // 处理文件添加（多选、拖拽、粘贴）
   const handleAddFiles = (fileList: FileList | File[]) => {
@@ -382,23 +384,25 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
 
   // 获取统计
   const fetchStats = async () => {
+    if (!loggedIn) return;
     try {
       const res = await fetch('/api/stats');
       const data = await res.json();
       if (data.status === 'success') setStats(data);
     } catch {}
   };
-  React.useEffect(() => { fetchStats(); }, []);
+  React.useEffect(() => { if (loggedIn) fetchStats(); }, [loggedIn]);
 
   // 获取设置
   const fetchSettings = async () => {
+    if (!loggedIn) return;
     try {
       const res = await fetch('/api/settings');
       const data = await res.json();
       if (data.status === 'success') setSettings(data);
     } catch {}
   };
-  React.useEffect(() => { if (tab === 'settings') fetchSettings(); }, [tab]);
+  React.useEffect(() => { if (loggedIn && tab === 'settings') fetchSettings(); }, [loggedIn, tab]);
 
   // 弹窗打开时获取图片尺寸和大小
   React.useEffect(() => {

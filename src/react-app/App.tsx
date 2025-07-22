@@ -582,7 +582,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   }
 
   // 1. Masonry渲染函数
-  const renderMasonryItem = ({ data, index }: { data: any; index: number }) => {
+  const renderMasonryItem = ({ data }: { data: any }) => {
     const img = data;
     const isWide = img.width > img.height;
     const isSelected = selectMode && selected.includes(img.file_id);

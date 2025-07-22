@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
+import { v4 as uuidv4 } from 'uuid';
 
 type Bindings = {
   TG_BOT_TOKEN: string;
@@ -269,6 +270,11 @@ app.get('/api/stats', async (c) => {
 });
 // 设置API
 app.get('/api/settings', async (c) => {
+  // 鉴权
+  const token = getAuthToken(c);
+  if (!token || !globalAuthToken || token !== globalAuthToken) {
+    return c.json({ status: 'error', message: '未登录' }, { status: 401 });
+  }
   const DB = c.env.DB;
   const SHORTLINK_DOMAIN = (c.env as any).SHORTLINK_DOMAIN;
   const TG_CHAT_ID = c.env.TG_CHAT_ID;
@@ -298,7 +304,8 @@ app.get('/api/test-db', async (c) => {
   }
 });
 
-// 登录校验中间件
+let globalAuthToken: string | null = null;
+
 function getAuthToken(c: any) {
   const cookie = c.req.header('cookie') || '';
   const match = cookie.match(/auth_token=([^;]+)/);
@@ -314,8 +321,11 @@ function setAuthCookie(token: string) {
 app.post('/api/login', async (c) => {
   const { username, password } = await c.req.json();
   if (username === c.env.ADMIN_USER && password === c.env.ADMIN_PASS) {
+    // 生成随机 token
+    const token = uuidv4();
+    globalAuthToken = token;
     return c.json({ status: 'success' }, {
-      headers: { 'Set-Cookie': setAuthCookie(password) }
+      headers: { 'Set-Cookie': setAuthCookie(token) }
     });
   }
   return c.json({ status: 'error', message: '用户名或密码错误' }, { status: 401 });
@@ -323,6 +333,7 @@ app.post('/api/login', async (c) => {
 
 // 登出接口
 app.post('/api/logout', async (c) => {
+  globalAuthToken = null;
   return c.json({ status: 'success' }, {
     headers: { 'Set-Cookie': 'auth_token=; Path=/; HttpOnly; Max-Age=0; SameSite=Strict' }
   });
@@ -334,7 +345,7 @@ app.use('/api/', async (c, next) => {
   const url = c.req.url;
   if (url.includes('/api/login') || url.includes('/api/logout') || url.includes('/api/settings')) return await next();
   const token = getAuthToken(c);
-  if (token !== c.env.ADMIN_PASS) {
+  if (!token || !globalAuthToken || token !== globalAuthToken) {
     return c.json({ status: 'error', message: '未登录' }, { status: 401 });
   }
   // 刷新cookie时效

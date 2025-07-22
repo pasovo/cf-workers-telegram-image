@@ -454,6 +454,7 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
     await fetch('/api/logout', { method: 'POST', credentials: 'include' });
     setLoggedIn(false);
     setToast({ message: '已退出登录', type: 'info' });
+    window.location.reload(); // 强制刷新页面，确保 cookie 失效后重新鉴权
   };
 
   // 未登录时渲染登录界面

@@ -20,7 +20,6 @@ jobs:
         run: |
           DB_NAME="${{ secrets.D1_DATABASE_NAME }}"
           DB_ID=$(npx wrangler d1 list --json | jq -r ".[] | select(.name==\"$DB_NAME\") | .uuid")
-          echo "查找到数据库ID: $DB_ID"
           cat <<EOF | sed 's/^ *//' > wrangler.toml
             name = "cf-workers-telegram-image"
             main = "./src/worker/index.ts"

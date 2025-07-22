@@ -270,6 +270,11 @@ app.get('/api/stats', async (c) => {
 });
 // 设置API
 app.get('/api/settings', async (c) => {
+  // 鉴权
+  const token = getAuthToken(c);
+  if (!token || !globalAuthToken || token !== globalAuthToken) {
+    return c.json({ status: 'error', message: '未登录' }, { status: 401 });
+  }
   const DB = c.env.DB;
   const SHORTLINK_DOMAIN = (c.env as any).SHORTLINK_DOMAIN;
   const TG_CHAT_ID = c.env.TG_CHAT_ID;

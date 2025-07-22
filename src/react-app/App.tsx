@@ -21,29 +21,25 @@ function Toast({ message, type = 'info', onClose }: { message: string; type?: 'i
 }
 
 function App() {
-  const [loggedIn, setLoggedIn] = React.useState(false);
   const [authChecked, setAuthChecked] = React.useState(false);
+  const [isAuthed, setIsAuthed] = React.useState(false);
 
   React.useEffect(() => {
     fetch('/api/settings', { credentials: 'include' })
       .then(res => {
-        if (res.status === 401) setLoggedIn(false);
-        else setLoggedIn(true);
+        if (res.status === 401) setIsAuthed(false);
+        else setIsAuthed(true);
       })
-      .catch(() => setLoggedIn(false))
       .finally(() => setAuthChecked(true));
   }, []);
 
   if (!authChecked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#10151b] text-white text-lg">正在检查登录状态...</div>
-    );
+    return <div className="min-h-screen flex items-center justify-center bg-[#10151b] text-white text-lg">正在检查登录状态...</div>;
   }
-
-  return <AppContent loggedIn={loggedIn} setLoggedIn={setLoggedIn} />;
+  return <AppContent isAuthed={isAuthed} setIsAuthed={setIsAuthed} />;
 }
 
-function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn: (v: boolean) => void }) {
+function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed: (v: boolean) => void }) {
   const [pending, setPending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string; tags?: string; filename?: string }>>([]);
@@ -132,14 +128,14 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
 
   // 文件名过滤
   const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '', tagVal = '', filenameVal = '') => {
-    if (!loggedIn) return;
+    if (!isAuthed) return;
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(pageNum), limit: String(limitNum) });
       if (searchVal) params.append('search', searchVal);
       if (tagVal) params.append('tag', tagVal);
       if (filenameVal) params.append('filename', filenameVal);
-      const response = await fetch(`/api/history?${params.toString()}`);
+      const response = await fetch(`/api/history?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) throw new Error('获取历史记录失败');
       const data = await response.json();
       if (data.status === 'success') {
@@ -169,10 +165,10 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
   };
 
   React.useEffect(() => {
-    if (!loggedIn) return;
+    if (!isAuthed) return;
     fetchHistory(page, limit, search, tagFilter, filenameFilter);
     // eslint-disable-next-line
-  }, [loggedIn, page, limit, search, tagFilter, filenameFilter]);
+  }, [isAuthed, page, limit, search, tagFilter, filenameFilter]);
 
   // 处理文件添加（多选、拖拽、粘贴）
   const handleAddFiles = (fileList: FileList | File[]) => {
@@ -348,6 +344,7 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
       const res = await fetch('/api/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ ids: selected })
       });
       const data = await res.json();
@@ -384,25 +381,25 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
 
   // 获取统计
   const fetchStats = async () => {
-    if (!loggedIn) return;
+    if (!isAuthed) return;
     try {
-      const res = await fetch('/api/stats');
+      const res = await fetch('/api/stats', { credentials: 'include' });
       const data = await res.json();
       if (data.status === 'success') setStats(data);
     } catch {}
   };
-  React.useEffect(() => { if (loggedIn) fetchStats(); }, [loggedIn]);
+  React.useEffect(() => { if (isAuthed) fetchStats(); }, [isAuthed]);
 
   // 获取设置
   const fetchSettings = async () => {
-    if (!loggedIn) return;
+    if (!isAuthed) return;
     try {
-      const res = await fetch('/api/settings');
+      const res = await fetch('/api/settings', { credentials: 'include' });
       const data = await res.json();
       if (data.status === 'success') setSettings(data);
     } catch {}
   };
-  React.useEffect(() => { if (loggedIn && tab === 'settings') fetchSettings(); }, [loggedIn, tab]);
+  React.useEffect(() => { if (isAuthed && tab === 'settings') fetchSettings(); }, [isAuthed, tab]);
 
   // 弹窗打开时获取图片尺寸和大小
   React.useEffect(() => {
@@ -414,7 +411,7 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
     };
     img.src = `/api/get_photo/${modalItem.file_id}`;
     // 获取大小
-    fetch(`/api/get_photo/${modalItem.file_id}`)
+    fetch(`/api/get_photo/${modalItem.file_id}`, { credentials: 'include' })
       .then(res => {
         const size = Number(res.headers.get('content-length')) || 0;
         setImgInfo(prev => ({ ...prev, size }));
@@ -440,7 +437,7 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
       });
       const data = await res.json();
       if (res.ok && data.status === 'success') {
-        setLoggedIn(true);
+        setIsAuthed(true);
         setLoginUser('');
         setLoginPass('');
         setLoginError('');
@@ -456,13 +453,13 @@ function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn:
   // 登出方法
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST', credentials: 'include' });
-    setLoggedIn(false);
+    setIsAuthed(false);
     setToast({ message: '已退出登录', type: 'info' });
     window.location.reload(); // 强制刷新页面，确保 cookie 失效后重新鉴权
   };
 
   // 未登录时渲染登录界面
-  if (!loggedIn) {
+  if (!isAuthed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#10151b]">
         <div className="card card-hover w-full max-w-xs mx-auto p-8 flex flex-col items-center">

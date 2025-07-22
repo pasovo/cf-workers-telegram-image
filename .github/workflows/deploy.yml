@@ -10,10 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 8
-      - run: pnpm install && pnpm build
 
       # 生成 wrangler.toml（必须在 build 前）
       - name: Get D1 database id and generate wrangler.toml
@@ -52,6 +48,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
 
+      # 注入所有 secrets
       - name: Set all secrets
         run: |
           echo "${{ secrets.TG_BOT_TOKEN }}" | npx wrangler secret put TG_BOT_TOKEN
@@ -64,6 +61,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
 
+      # 正式部署
       - name: Publish to Cloudflare Workers
         run: npx wrangler deploy
         env:

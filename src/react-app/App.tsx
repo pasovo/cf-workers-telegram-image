@@ -183,13 +183,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   }, [isAuthed, search, tagFilter, filenameFilter]);
 
   // 4. Masonry滚动到底部时加载更多
-  const handleMasonryEndReached = () => {
-    if (hasMore && !isLoadingMore) {
-      const nextPage = page + 1;
-      setPage(nextPage);
-      fetchHistory(search, tagFilter, filenameFilter, nextPage, true);
-    }
-  };
+  // const handleMasonryEndReached = () => {
+  //   if (hasMore && !isLoadingMore) {
+  //     const nextPage = page + 1;
+  //     setPage(nextPage);
+  //     fetchHistory(search, tagFilter, filenameFilter, nextPage, true);
+  //   }
+  // };
 
   // 处理文件添加（多选、拖拽、粘贴）
   // 修改 handleAddFiles，自动去重
@@ -855,19 +855,23 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                       columnWidth={180} // 调小单列宽度，提升列数
                       overscanBy={2}
                       render={renderMasonryItem}
-                      onRender={(renderedItems: any) => {
-                        if (
-                          hasMore &&
-                          !isLoadingMore &&
-                          renderedItems.length > 0 &&
-                          renderedItems[renderedItems.length - 1].index >= history.length - 1
-                        ) {
-                          handleMasonryEndReached();
-                        }
-                      }}
                     />
                     {isLoadingMore && <div style={{textAlign:'center',color:'#888',padding:'12px'}}>加载中...</div>}
-                    {!hasMore && <div style={{textAlign:'center',color:'#888',padding:'12px'}}>没有更多了</div>}
+                    {hasMore && !isLoadingMore && (
+                      <div style={{textAlign:'center',padding:'16px'}}>
+                        <button
+                          style={{
+                            background: '#22d3ee', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 32px', fontSize: 16, cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 8px #22d3ee33'
+                          }}
+                          onClick={() => {
+                            const nextPage = page + 1;
+                            setPage(nextPage);
+                            fetchHistory(search, tagFilter, filenameFilter, nextPage, true);
+                          }}
+                        >加载更多</button>
+                      </div>
+                    )}
+                    {!hasMore && history.length > 0 && <div style={{textAlign:'center',color:'#888',padding:'12px'}}>没有更多了</div>}
                   </div>
                 )}
               </div>

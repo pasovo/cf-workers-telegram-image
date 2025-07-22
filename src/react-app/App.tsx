@@ -20,7 +20,30 @@ function Toast({ message, type = 'info', onClose }: { message: string; type?: 'i
   );
 }
 
-function AppContent() {
+function App() {
+  const [loggedIn, setLoggedIn] = React.useState(false);
+  const [authChecked, setAuthChecked] = React.useState(false);
+
+  React.useEffect(() => {
+    fetch('/api/settings', { credentials: 'include' })
+      .then(res => {
+        if (res.status === 401) setLoggedIn(false);
+        else setLoggedIn(true);
+      })
+      .catch(() => setLoggedIn(false))
+      .finally(() => setAuthChecked(true));
+  }, []);
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#10151b] text-white text-lg">正在检查登录状态...</div>
+    );
+  }
+
+  return <AppContent loggedIn={loggedIn} setLoggedIn={setLoggedIn} />;
+}
+
+function AppContent({ loggedIn, setLoggedIn }: { loggedIn: boolean; setLoggedIn: (v: boolean) => void }) {
   const [pending, setPending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string; tags?: string; filename?: string }>>([]);
@@ -394,21 +417,10 @@ function AppContent() {
       });
   }, [modalOpen, modalItem]);
 
-  const [loggedIn, setLoggedIn] = useState<boolean>(false);
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
-
-  // 检查登录态
-  useEffect(() => {
-    fetch('/api/settings', { credentials: 'include' })
-      .then(res => {
-        if (res.status === 401) setLoggedIn(false);
-        else setLoggedIn(true);
-      })
-      .catch(() => setLoggedIn(false));
-  }, []);
 
   // 登录方法
   const handleLogin = async (e?: React.FormEvent) => {
@@ -831,4 +843,4 @@ function AppContent() {
   );
 }
 
-export default AppContent;
+export default App;

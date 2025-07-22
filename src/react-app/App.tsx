@@ -251,58 +251,95 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   };
 
   // 上传队列处理
+  // 1. 设置页支持自定义最大并发上传数
+  const [maxConcurrentUploads, setMaxConcurrentUploads] = useState(() => Number(localStorage.getItem('maxConcurrentUploads')) || 3);
+  // 2. 上传队列多线程上传实现
+  const uploadQueueRef = useRef<File[]>([]);
+  const [uploadingIdx, setUploadingIdx] = useState<number[]>([]); // 正在上传的索引
+  const [failedIdx, setFailedIdx] = useState<number[]>([]); // 上传失败的索引
+
+  // 单文件上传逻辑，供多线程上传队列调用
+  const uploadFile = async (file: File) => {
+    let uploadFile = file;
+    if (file.size > 10 * 1024 * 1024) {
+      setToast({ message: '图片大于10MB，自动压缩中...', type: 'info' });
+      uploadFile = await compressImage(file);
+      if (uploadFile.size > 10 * 1024 * 1024) {
+        setToast({ message: '图片压缩后仍大于10MB，无法上传', type: 'error' });
+        throw new Error('图片过大');
+      }
+    }
+    const formData = new FormData();
+    formData.append('photo', uploadFile);
+    formData.append('expire', expire);
+    const tagsToUpload = selectedTags.length > 0 ? selectedTags : ['默认'];
+    formData.append('tags', tagsToUpload.join(','));
+    formData.append('filename', uploadFile.name);
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/upload');
+      xhr.onload = () => {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          if (xhr.status === 200 && res.status === 'success') {
+            setToast({ message: '图片上传成功', type: 'success' });
+            fetchStats(); // 上传后刷新统计
+            resolve();
+          } else {
+            setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
+            reject(new Error(res.message || '上传失败'));
+          }
+        } catch (err) {
+          setToast({ message: '上传失败，服务器响应异常', type: 'error' });
+          reject(err);
+        }
+      };
+      xhr.onerror = () => {
+        setToast({ message: '上传失败，请重试', type: 'error' });
+        reject(new Error('上传失败'));
+      };
+      xhr.send(formData);
+    });
+  };
+
   const handleUploadAll = async () => {
     if (files.length === 0) return;
     setPending(true);
-    for (const file of files) {
-      let uploadFile = file;
-      if (file.size > 10 * 1024 * 1024) {
-        setToast({ message: '图片大于10MB，自动压缩中...', type: 'info' });
-        uploadFile = await compressImage(file);
-        if (uploadFile.size > 10 * 1024 * 1024) {
-          setToast({ message: '图片压缩后仍大于10MB，无法上传', type: 'error' });
-          continue;
-        }
-      }
-      const formData = new FormData();
-      formData.append('photo', uploadFile);
-      formData.append('expire', expire);
-      const tagsToUpload = selectedTags.length > 0 ? selectedTags : ['默认'];
-      formData.append('tags', tagsToUpload.join(','));
-      formData.append('filename', uploadFile.name);
+    uploadQueueRef.current = files.slice();
+    setUploadingIdx([]);
+    setFailedIdx([]);
+    let active = 0;
+    let finished = 0;
+    const total = files.length;
+    const next = async () => {
+      if (uploadQueueRef.current.length === 0) return;
+      if (active >= maxConcurrentUploads) return;
+      const idx = files.length - uploadQueueRef.current.length;
+      const file = uploadQueueRef.current.shift();
+      if (!file) return;
+      setUploadingIdx(prev => [...prev, idx]);
+      active++;
       try {
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', '/api/upload');
-          xhr.onload = () => {
-            try {
-              const res = JSON.parse(xhr.responseText);
-              if (xhr.status === 200 && res.status === 'success') {
-                setToast({ message: '图片上传成功', type: 'success' });
-                fetchStats(); // 上传后刷新统计
-                resolve();
-              } else {
-                setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
-                reject(new Error(res.message || '上传失败'));
-              }
-            } catch (err) {
-              setToast({ message: '上传失败，服务器响应异常', type: 'error' });
-              reject(err);
-            }
-          };
-          xhr.onerror = () => {
-            setToast({ message: '上传失败，请重试', type: 'error' });
-            reject(new Error('上传失败'));
-          };
-          xhr.send(formData);
-        });
-      } catch {}
-    }
-    setFiles([]);
-    setSelectedTags([]);
+        await uploadFile(file);
+        setUploadingIdx(prev => prev.filter(i => i !== idx));
+        // 上传成功立即刷新历史
+        fetchHistory(search, tagFilter, filenameFilter);
+      } catch {
+        setUploadingIdx(prev => prev.filter(i => i !== idx));
+        setFailedIdx(prev => [...prev, idx]);
+      }
+      active--;
+      finished++;
+      if (finished < total) next();
+    };
+    // 启动并发上传
+    for (let i = 0; i < maxConcurrentUploads; i++) next();
+    // 等待全部完成
+    while (finished < total) await new Promise(r => setTimeout(r, 100));
+    // 上传成功的图片从队列移除，失败的保留
+    setFiles(prev => prev.filter((_, i) => failedIdx.includes(i)));
     setPending(false);
     setUploadProgress(0);
-    fetchHistory(search, tagFilter, filenameFilter);
   };
 
   // 回车搜索
@@ -556,20 +593,23 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   </label>
                   {files.length > 0 && (
                     <div className="w-full flex flex-wrap gap-2 mt-2">
-                      {files.map((file, idx) => (
+                      {files.slice(0, 30).map((file, idx) => (
                         <div key={idx} className={`relative flex flex-col items-center border rounded p-2 bg-[#232b36] ${selected.includes(file.name) ? 'ring-2 ring-cyan-400 border-cyan-400' : ''}`}>
                           <button
                             className="absolute -top-2 -right-2 w-6 h-6 bg-[#232b36] text-gray-400 hover:text-red-400 rounded-full flex items-center justify-center shadow"
                             type="button"
                             title="移除"
                             onClick={() => handleRemoveFile(idx)}
-                          >
-                            ×
-                          </button>
+                          >×</button>
                           <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" onClick={() => setSelected([...selected, file.name])} />
                           <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
+                          {uploadingIdx.includes(idx) && <span className="text-xs text-blue-400 mt-1">上传中...</span>}
+                          {failedIdx.includes(idx) && <span className="text-xs text-red-400 mt-1">失败</span>}
                         </div>
                       ))}
+                      {files.length > 30 && (
+                        <div className="flex items-center justify-center w-16 h-16 bg-[#232b36] rounded text-cyan-400 text-lg font-bold">+{files.length - 30}</div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -777,6 +817,21 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                           disabled={!faviconFile}
                         >保存</button>
                       </div>
+                    </div>
+                    <div className="mt-6">
+                      <div className="text-sm text-gray-300 mb-1">最大并发上传数（1~5，建议3）：</div>
+                      <input
+                        type="number"
+                        min={1}
+                        max={5}
+                        value={maxConcurrentUploads}
+                        onChange={e => {
+                          const v = Math.max(1, Math.min(5, Number(e.target.value)));
+                          setMaxConcurrentUploads(v);
+                          localStorage.setItem('maxConcurrentUploads', String(v));
+                        }}
+                        className="border rounded px-2 py-1 bg-[#232b36] text-gray-100 w-16"
+                      />
                     </div>
                     <div className="flex justify-end pt-4">
                       <button

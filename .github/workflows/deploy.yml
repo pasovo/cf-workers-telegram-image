@@ -14,58 +14,45 @@ jobs:
         with:
           version: 8
       - run: pnpm install
-      - run: pnpm build # 如果有构建步骤，没有可删除此行
+      - run: pnpm build
 
-      # 动态生成 wrangler.toml
       - name: Get D1 database id and generate wrangler.toml
         id: d1
         run: |
           DB_NAME="${{ secrets.D1_DATABASE_NAME }}"
           DB_ID=$(npx wrangler d1 list --json | jq -r ".[] | select(.name==\"$DB_NAME\") | .uuid")
           echo "查找到数据库ID: $DB_ID"
-cat > wrangler.toml <<EOF
-name = "cf-workers-telegram-image"
-main = "./src/worker/index.ts"
-compatibility_date = "2025-04-01"
-compatibility_flags = ["nodejs_compat"]
+          cat <<EOF | sed 's/^ *//' > wrangler.toml
+            name = "cf-workers-telegram-image"
+            main = "./src/worker/index.ts"
+            compatibility_date = "2025-04-01"
+            compatibility_flags = ["nodejs_compat"]
 
-[observability]
-enabled = true
+            [observability]
+            enabled = true
 
-upload_source_maps = true
+            upload_source_maps = true
 
-[[d1_databases]]
-binding = "DB"
-database_name = "$DB_NAME"
-database_id = "$DB_ID"
-EOF
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-
-      # 自动注入 secrets
-      - name: Set TG_BOT_TOKEN secret
-        run: echo "${{ secrets.TG_BOT_TOKEN }}" | npx wrangler secret put TG_BOT_TOKEN --yes
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-      - name: Set TG_CHAT_ID secret
-        run: echo "${{ secrets.TG_CHAT_ID }}" | npx wrangler secret put TG_CHAT_ID --yes
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-      - name: Set ADMIN_USER secret
-        run: echo "${{ secrets.ADMIN_USER }}" | npx wrangler secret put ADMIN_USER --yes
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-      - name: Set ADMIN_PASS secret
-        run: echo "${{ secrets.ADMIN_PASS }}" | npx wrangler secret put ADMIN_PASS --yes
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-      - name: Set SHORTLINK_DOMAIN secret (optional)
-        if: ${{ secrets.SHORTLINK_DOMAIN }}
-        run: echo "${{ secrets.SHORTLINK_DOMAIN }}" | npx wrangler secret put SHORTLINK_DOMAIN --yes
+            [[d1_databases]]
+            binding = "DB"
+            database_name = "$DB_NAME"
+            database_id = "$DB_ID"
+          EOF
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
 
-      # 自动部署
+      - name: Set all secrets
+        run: |
+          echo "${{ secrets.TG_BOT_TOKEN }}" | npx wrangler secret put TG_BOT_TOKEN --yes
+          echo "${{ secrets.TG_CHAT_ID }}" | npx wrangler secret put TG_CHAT_ID --yes
+          echo "${{ secrets.ADMIN_USER }}" | npx wrangler secret put ADMIN_USER --yes
+          echo "${{ secrets.ADMIN_PASS }}" | npx wrangler secret put ADMIN_PASS --yes
+          if [ -n "${{ secrets.SHORTLINK_DOMAIN }}" ]; then
+            echo "${{ secrets.SHORTLINK_DOMAIN }}" | npx wrangler secret put SHORTLINK_DOMAIN --yes
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+
       - name: Publish to Cloudflare Workers
         run: npx wrangler deploy
         env:

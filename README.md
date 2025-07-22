@@ -26,7 +26,13 @@
 ## 🚀 快速开始
 
 1. **准备账号和信息**
-   - 注册 Cloudflare 账号，开通 D1 数据库（记住你的数据库名字）。
+   - 注册 Cloudflare 账号。
+   - 登录 Cloudflare 控制台，左侧菜单点击“Workers & Pages”，进入 Workers 页面。
+   - 点击“D1”标签页，创建一个新的 D1 数据库，输入你喜欢的数据库名字（比如 telegram_image_db），记住这个名字。
+   - 进入右上角头像 → My Profile → API Tokens → Create Token。
+     - 选择“Cloudflare Workers”模板。
+     - 在权限设置页面，点击“+ Add more permissions”，选择“Account / Workers D1 / Edit”，这样你的 Token 就有 D1 数据库的管理权限。
+     - 生成 Token，记住并复制（只显示一次），粘贴到 GitHub 仓库的 Secrets 里（变量名 CF_API_TOKEN）。
    - 注册 Telegram 机器人，拿到 Bot Token。
    - 用 @getidbot 获取你的 Telegram Chat ID。
 
@@ -41,9 +47,11 @@
    - ADMIN_PASS：登录密码
    - SHORTLINK_DOMAIN：自定义短链域名（可选，不填也行）
 
-4. **推送代码到 main 分支（或直接点 GitHub 的 Commit 按钮）**
-   - 会自动触发部署，无需手动写 wrangler.toml，无需手动绑定数据库。
-   - 自动查找数据库 ID，自动生成配置，自动注入 secrets，自动部署。
+4. **首次部署：手动触发 GitHub Actions 部署**
+   - 打开你的 GitHub 仓库，点击上方的“Actions”标签。
+   - 选择左侧的“Deploy to Cloudflare Workers”工作流。
+   - 右侧点击绿色的“Run workflow”按钮，直接点击即可（不用填写参数）。
+   - 等待几分钟，看到绿色对勾就代表部署成功。
 
 5. **首次部署后，去 Cloudflare D1 控制台执行下面的 SQL 初始化表结构**
    ```sql

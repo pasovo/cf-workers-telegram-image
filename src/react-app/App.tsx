@@ -159,7 +159,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         const uniqueTags = Array.from(new Set(allTags)) as string[];
         setTagOptions(uniqueTags.length > 0 ? uniqueTags : ['默认']);
         // 判断是否还有更多
-        setHasMore(data.data.length === LIMIT);
+        setHasMore(data.data.length >= LIMIT);
       } else {
         setToast({ message: data.message || '加载历史记录失败', type: 'error' });
       }
@@ -852,7 +852,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     <Masonry
                       items={history}
                       columnGutter={12}
-                      columnWidth={220}
+                      columnWidth={180} // 调小单列宽度，提升列数
                       overscanBy={2}
                       render={renderMasonryItem}
                       onRender={(renderedItems: any) => {

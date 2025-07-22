@@ -43,7 +43,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [pending, setPending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string; tags?: string; filename?: string }>>([]);
-  const [search, setSearch] = useState('');
+  const [search] = useState('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' }>({ message: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);

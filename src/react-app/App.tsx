@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import SparkMD5 from 'spark-md5';
-import { Masonry } from 'masonic';
+import MasonryList from 'react-masonry-list';
 
 // 全局弹窗组件
 function Toast({ message, type = 'info', onClose }: { message: string; type?: 'info' | 'error' | 'success'; onClose: () => void }) {
@@ -474,7 +474,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const res = await fetch('/api/stats', { credentials: 'include' });
       const data = await res.json();
       if (data.status === 'success') setStats(data);
-    } catch {}
+    } catch (err) {}
   };
   React.useEffect(() => { if (isAuthed) fetchStats(); }, [isAuthed]);
 
@@ -581,17 +581,30 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     );
   }
 
-  // 1. Masonry渲染函数
-  const renderMasonryItem = ({ data }: { data: any }) => {
-    const img = data;
-    const isWide = img.width > img.height;
+  // 骨架屏组件
+  const SkeletonItem = () => (
+    <div style={{
+      margin: 6,
+      borderRadius: 12,
+      background: 'linear-gradient(90deg, #232b36 60%, #2a3342 100%)',
+      height: 240,
+      width: '100%',
+      minHeight: 120,
+      minWidth: 120,
+      boxShadow: '0 2px 8px #232b3633',
+      animation: 'pulse 1.2s infinite',
+    }} />
+  );
+
+  // MasonryList渲染函数
+  const renderMasonryItem = (img: any) => {
+    if (img.skeleton) return <SkeletonItem />;
     const isSelected = selectMode && selected.includes(img.file_id);
     return (
       <div
         key={img.id}
         style={{
           margin: 6,
-          gridColumn: isWide ? 'span 2' : undefined,
           borderRadius: 12,
           overflow: 'hidden',
           background: '#232b36',
@@ -636,6 +649,11 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       </div>
     );
   };
+
+  // MasonryList items准备
+  const displayItems = loading && history.length === 0
+    ? Array.from({ length: 20 }, (_, i) => ({ skeleton: true, id: 'skeleton-' + i }))
+    : history;
 
   return (
     <div className="min-h-screen bg-[#10151b]">
@@ -848,20 +866,22 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     <p className="text-gray-500 text-center">暂无上传记录</p>
                   </div>
                 ) : (
-                  <div style={{ width: '100%', height: 'calc(100vh - 200px)' }}>
-                    <Masonry
-                      items={history}
-                      columnGutter={12}
-                      columnWidth={180} // 调小单列宽度，提升列数
-                      overscanBy={2}
-                      render={renderMasonryItem}
+                  <div style={{ width: '100%', minHeight: 'calc(100vh - 200px)' }}>
+                    <MasonryList
+                      items={displayItems.map(renderMasonryItem)}
+                      colCount={6}
+                      gap={12}
                     />
-                    {isLoadingMore && <div style={{textAlign:'center',color:'#888',padding:'12px'}}>加载中...</div>}
+                    {isLoadingMore && (
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '16px 0' }}>
+                        {Array.from({ length: 4 }, (_, i) => <SkeletonItem key={'more-' + i} />)}
+                      </div>
+                    )}
                     {hasMore && !isLoadingMore && (
                       <div style={{textAlign:'center',padding:'16px'}}>
                         <button
                           style={{
-                            background: '#22d3ee', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 32px', fontSize: 16, cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 8px #22d3ee33'
+                            background: '#22d3ee', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 32px', fontSize: 16, cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 8px #22d3ee33', marginRight: 16
                           }}
                           onClick={() => {
                             const nextPage = page + 1;
@@ -869,9 +889,30 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                             fetchHistory(search, tagFilter, filenameFilter, nextPage, true);
                           }}
                         >加载更多</button>
+                        <button
+                          style={{
+                            background: '#232b36', color: '#22d3ee', border: 'none', borderRadius: 8, padding: '8px 32px', fontSize: 16, cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 8px #22d3ee33'
+                          }}
+                          onClick={() => {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                        >回到顶部</button>
                       </div>
                     )}
-                    {!hasMore && history.length > 0 && <div style={{textAlign:'center',color:'#888',padding:'12px'}}>没有更多了</div>}
+                    {!hasMore && history.length > 0 && (
+                      <div style={{textAlign:'center',color:'#888',padding:'12px'}}>
+                        没有更多了
+                        <button
+                          style={{
+                            marginLeft: 24,
+                            background: '#232b36', color: '#22d3ee', border: 'none', borderRadius: 8, padding: '8px 32px', fontSize: 16, cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 8px #22d3ee33'
+                          }}
+                          onClick={() => {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                        >回到顶部</button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -945,18 +986,35 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                         max={5}
                         value={maxConcurrentUploads}
                         onChange={e => {
-                          const v = Math.max(1, Math.min(5, Number(e.target.value)));
-                          setMaxConcurrentUploads(v);
-                          localStorage.setItem('maxConcurrentUploads', String(v));
+                          setMaxConcurrentUploads(Math.max(1, Math.min(5, Number(e.target.value))));
+                          localStorage.setItem('maxConcurrentUploads', String(Math.max(1, Math.min(5, Number(e.target.value)))));
                         }}
                         className="border rounded px-2 py-1 bg-[#232b36] text-gray-100 w-16"
                       />
                     </div>
-                    <div className="flex justify-end pt-4">
+                    <div className="flex justify-end pt-4 gap-4">
                       <button
                         className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-red-600"
                         onClick={handleLogout}
                       >退出登录</button>
+                      <button
+                        className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                        onClick={async () => {
+                          setToast({ message: '正在去重...', type: 'info' });
+                          try {
+                            const res = await fetch('/api/deduplicate', { method: 'POST', credentials: 'include' });
+                            const data = await res.json();
+                            if (data.status === 'success') {
+                              setToast({ message: `去重完成，删除了${data.deleted || 0}条重复图片`, type: 'success' });
+                              fetchStats();
+                            } else {
+                              setToast({ message: data.message || '去重失败', type: 'error' });
+                            }
+                          } catch (e) {
+                            setToast({ message: '去重失败，请重试', type: 'error' });
+                          }
+                        }}
+                      >去重</button>
                     </div>
                   </div>
                 ) : <div className="text-gray-400">加载中...</div>}
@@ -969,9 +1027,10 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={closeModal}>
           <div className="bg-[#181f29] rounded-2xl shadow-2xl p-6 w-full max-w-md relative" onClick={e => e.stopPropagation()}>
             <button className="absolute top-2 right-2 text-gray-400 hover:text-cyan-400 text-2xl" onClick={closeModal}>×</button>
-            <div style={{minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <div style={{minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'}}>
+              {/* 加载动画，未加载完时显示 */}
               {!imgInfo.width && (
-                <div className="w-full h-80 flex items-center justify-center bg-[#232b36] animate-pulse rounded">
+                <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 2}} className="w-full h-80 flex items-center justify-center bg-[#232b36] animate-pulse rounded">
                   <span className="text-gray-400">图片加载中...</span>
                 </div>
               )}
@@ -980,7 +1039,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 alt="大图"
                 loading="lazy"
                 className="w-full rounded mb-4 bg-[#232b36]"
-                style={{maxHeight: 320, objectFit: 'contain', display: imgInfo.width ? 'block' : 'none'}}
+                style={{maxHeight: 320, objectFit: 'contain', opacity: imgInfo.width ? 1 : 0, transition: 'opacity 0.3s'}}
                 onLoad={e => setImgInfo(prev => ({ ...prev, width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight }))}
               />
             </div>

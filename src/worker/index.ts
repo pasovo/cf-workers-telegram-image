@@ -66,7 +66,7 @@ app.post('/api/upload', async (c) => {
   if (expireOption === '7') expire_at = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
   if (expireOption === '30') expire_at = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
   // 标签和文件名
-  let tags = (formData.get('tags') as string || '').trim();
+  const tags = (formData.get('tags') as string || '').trim();
   let filename = (formData.get('filename') as string || '').trim();
   if (filename) filename = sanitizeFilename(filename);
   // forever/null 表示永久
@@ -227,7 +227,7 @@ app.get('/api/history', async (c) => {
     const limitNum = parseInt(limit, 10) || 20;
     const offset = (pageNum - 1) * limitNum;
     let sql = 'SELECT * FROM images WHERE 1=1';
-    let params: any[] = [];
+    const params: any[] = [];
     if (search) {
       sql += ' AND (file_id LIKE ? OR chat_id LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
@@ -317,7 +317,7 @@ app.post('/api/deduplicate', async (c) => {
   // 查找重复 hash
   const { results } = await DB.prepare('SELECT hash, COUNT(*) as n FROM images WHERE hash IS NOT NULL GROUP BY hash HAVING n > 1').all();
   let deleted = 0;
-  let duplicates: any[] = [];
+  const duplicates: any[] = [];
   for (const row of results) {
     // 保留最后一条，其余删除
     const dups = await DB.prepare('SELECT * FROM images WHERE hash = ? ORDER BY created_at ASC').bind(row.hash).all();

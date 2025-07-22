@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import SparkMD5 from 'spark-md5';
+import { Masonry } from 'masonic';
 
 // 全局弹窗组件
 function Toast({ message, type = 'info', onClose }: { message: string; type?: 'info' | 'error' | 'success'; onClose: () => void }) {
@@ -123,27 +124,42 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     }
   }, [pageTitle, faviconUrl]);
 
-  // 文件名过滤
-  const fetchHistory = async (searchVal = '', tagVal = '', filenameVal = '') => {
+  // 1. 新增分页相关状态
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const LIMIT = 20;
+
+  // 2. fetchHistory支持分页，支持追加
+  const fetchHistory = async (searchVal = '', tagVal = '', filenameVal = '', pageNum = 1, append = false) => {
     if (!isAuthed) return;
-    setLoading(true);
+    if (isLoadingMore) return;
+    if (!append) setLoading(true);
+    setIsLoadingMore(true);
     try {
       const params = new URLSearchParams();
       if (searchVal) params.append('search', searchVal);
       if (tagVal) params.append('tag', tagVal);
       if (filenameVal) params.append('filename', filenameVal);
-      // 不传 page/limit，后端返回全部
+      params.append('page', String(pageNum));
+      params.append('limit', String(LIMIT));
       const response = await fetch(`/api/history?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) throw new Error('获取历史记录失败');
       const data = await response.json();
       if (data.status === 'success') {
-        setHistory(data.data);
+        if (append) {
+          setHistory(prev => [...prev, ...data.data]);
+        } else {
+          setHistory(data.data);
+        }
         // 提取所有图片的标签
         const allTags = data.data
           .map((item: any) => (item.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean))
           .flat();
         const uniqueTags = Array.from(new Set(allTags)) as string[];
         setTagOptions(uniqueTags.length > 0 ? uniqueTags : ['默认']);
+        // 判断是否还有更多
+        setHasMore(data.data.length === LIMIT);
       } else {
         setToast({ message: data.message || '加载历史记录失败', type: 'error' });
       }
@@ -153,14 +169,27 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       }
     } finally {
       setLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
-  React.useEffect(() => {
+  // 3. useEffect依赖变化时重置分页
+  useEffect(() => {
     if (!isAuthed) return;
-    fetchHistory(search, tagFilter, filenameFilter);
+    setPage(1);
+    setHasMore(true);
+    fetchHistory(search, tagFilter, filenameFilter, 1, false);
     // eslint-disable-next-line
   }, [isAuthed, search, tagFilter, filenameFilter]);
+
+  // 4. Masonry滚动到底部时加载更多
+  const handleMasonryEndReached = () => {
+    if (hasMore && !isLoadingMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchHistory(search, tagFilter, filenameFilter, nextPage, true);
+    }
+  };
 
   // 处理文件添加（多选、拖拽、粘贴）
   // 修改 handleAddFiles，自动去重
@@ -552,6 +581,62 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     );
   }
 
+  // 1. Masonry渲染函数
+  const renderMasonryItem = ({ data, index }: { data: any; index: number }) => {
+    const img = data;
+    const isWide = img.width > img.height;
+    const isSelected = selectMode && selected.includes(img.file_id);
+    return (
+      <div
+        key={img.id}
+        style={{
+          margin: 6,
+          gridColumn: isWide ? 'span 2' : undefined,
+          borderRadius: 12,
+          overflow: 'hidden',
+          background: '#232b36',
+          boxShadow: isSelected ? '0 0 0 4px #22d3ee' : undefined,
+          opacity: selectMode ? 0.8 : 1,
+          cursor: 'pointer',
+          position: 'relative',
+        }}
+        onClick={() => {
+          if (selectMode) {
+            if (isSelected) setSelected(prev => prev.filter(id => id !== img.file_id));
+            else setSelected(prev => [...prev, img.file_id]);
+          } else {
+            openModal(img);
+          }
+        }}
+      >
+        <img
+          src={img.url || `/api/get_photo/${img.file_id}?thumb=1`}
+          alt={img.filename || img.file_id}
+          style={{ width: '100%', display: 'block', borderRadius: 12, maxHeight: 320, objectFit: 'cover' }}
+          loading="lazy"
+          onError={e => (e.currentTarget.src = 'https://via.placeholder.com/200?text=加载失败')}
+        />
+        {isSelected && (
+          <div style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            background: '#22d3ee',
+            color: '#fff',
+            borderRadius: '50%',
+            width: 24,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 'bold',
+            fontSize: 16,
+          }}>✓</div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#10151b]">
       {/* 顶部导航栏 */}
@@ -763,26 +848,26 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     <p className="text-gray-500 text-center">暂无上传记录</p>
                   </div>
                 ) : (
-                  <div className="w-full grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 max-w-6xl mx-auto">
-                    {history.map(item => (
-                      <div key={item.id} className="relative group">
-                        <img
-                          src={`/api/get_photo/${item.file_id}?thumb=1`}
-                          alt={item.file_id}
-                          loading="lazy"
-                          className={`w-full object-contain max-h-64 rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36] ${selectMode ? 'opacity-80' : ''} ${selectMode && selected.includes(item.file_id) ? 'ring-4 ring-cyan-400 border-cyan-400' : ''}`}
-                          onClick={() => {
-                            if (selectMode) {
-                              if (selected.includes(item.file_id)) setSelected(prev => prev.filter(id => id !== item.file_id));
-                              else setSelected(prev => [...prev, item.file_id]);
-                            } else {
-                              openModal(item);
-                            }
-                          }}
-                          onError={e => (e.currentTarget.src = 'https://via.placeholder.com/200?text=加载失败')}
-                        />
-                      </div>
-                    ))}
+                  <div style={{ width: '100%', height: 'calc(100vh - 200px)' }}>
+                    <Masonry
+                      items={history}
+                      columnGutter={12}
+                      columnWidth={220}
+                      overscanBy={2}
+                      render={renderMasonryItem}
+                      onRender={(renderedItems: any) => {
+                        if (
+                          hasMore &&
+                          !isLoadingMore &&
+                          renderedItems.length > 0 &&
+                          renderedItems[renderedItems.length - 1].index >= history.length - 1
+                        ) {
+                          handleMasonryEndReached();
+                        }
+                      }}
+                    />
+                    {isLoadingMore && <div style={{textAlign:'center',color:'#888',padding:'12px'}}>加载中...</div>}
+                    {!hasMore && <div style={{textAlign:'center',color:'#888',padding:'12px'}}>没有更多了</div>}
                   </div>
                 )}
               </div>

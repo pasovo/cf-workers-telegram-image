@@ -43,10 +43,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [pending, setPending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string; tags?: string; filename?: string }>>([]);
-  const [page, setPage] = useState(1);
-  const [limit] = useState(8);
   const [search, setSearch] = useState('');
-  const [pagination, setPagination] = useState({ page: 1, limit: 8, total: 0 });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' }>({ message: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -127,24 +124,20 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   }, [pageTitle, faviconUrl]);
 
   // 文件名过滤
-  const fetchHistory = async (pageNum = 1, limitNum = 8, searchVal = '', tagVal = '', filenameVal = '') => {
+  const fetchHistory = async (searchVal = '', tagVal = '', filenameVal = '') => {
     if (!isAuthed) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(pageNum), limit: String(limitNum) });
+      const params = new URLSearchParams();
       if (searchVal) params.append('search', searchVal);
       if (tagVal) params.append('tag', tagVal);
       if (filenameVal) params.append('filename', filenameVal);
+      // 不传 page/limit，后端返回全部
       const response = await fetch(`/api/history?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) throw new Error('获取历史记录失败');
       const data = await response.json();
       if (data.status === 'success') {
         setHistory(data.data);
-        setPagination({
-          page: data.pagination.page,
-          limit: data.pagination.limit,
-          total: data.pagination.total
-        });
         // 提取所有图片的标签
         const allTags = data.data
           .map((item: any) => (item.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean))
@@ -155,7 +148,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         setToast({ message: data.message || '加载历史记录失败', type: 'error' });
       }
     } catch (error) {
-      // 仅当明确不是“无数据”时才提示
       if (error instanceof Error && !/no such table|not found|not exist|not found/i.test(error.message)) {
         setToast({ message: '加载历史记录失败，请刷新页面重试', type: 'error' });
       }
@@ -166,14 +158,20 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
 
   React.useEffect(() => {
     if (!isAuthed) return;
-    fetchHistory(page, limit, search, tagFilter, filenameFilter);
+    fetchHistory(search, tagFilter, filenameFilter);
     // eslint-disable-next-line
-  }, [isAuthed, page, limit, search, tagFilter, filenameFilter]);
+  }, [isAuthed, search, tagFilter, filenameFilter]);
 
   // 处理文件添加（多选、拖拽、粘贴）
+  // 修改 handleAddFiles，自动去重
   const handleAddFiles = (fileList: FileList | File[]) => {
     const arr = Array.from(fileList).filter(f => f.type.startsWith('image/'));
-    setFiles(prev => [...prev, ...arr]);
+    setFiles(prev => {
+      // 按文件名和大小去重
+      const existing = new Set(prev.map(f => f.name + '_' + f.size));
+      const newFiles = arr.filter(f => !existing.has(f.name + '_' + f.size));
+      return [...prev, ...newFiles];
+    });
   };
   // input 选择
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -304,15 +302,12 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     setSelectedTags([]);
     setPending(false);
     setUploadProgress(0);
-    setPage(1);
-    setSearch('');
-    fetchHistory(1, limit, '', tagFilter, filenameFilter);
+    fetchHistory(search, tagFilter, filenameFilter);
   };
 
   // 回车搜索
   // 分页按钮
-  const handlePrevPage = () => { if (page > 1) setPage(page - 1); };
-  const handleNextPage = () => { if (history.length === limit) setPage(page + 1); };
+  // 删除 handlePrevPage、handleNextPage 相关函数和所有调用
 
   // 复制短链/Markdown/HTML
   const handleCopy = async (text: string) => {
@@ -690,20 +685,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     </>
                   )}
                 </div>
-                {/* 分页按钮 */}
-                <div className="flex items-center justify-between mb-2">
-                  <button
-                    className="px-2 py-1 bg-[#232b36] text-gray-100 rounded disabled:opacity-50 hover:border-cyan-400 border-2 border-[#232b36] transition"
-                    onClick={handlePrevPage}
-                    disabled={page === 1 || loading}
-                  >上一页</button>
-                  <span className="text-gray-300">第 {pagination.page} 页</span>
-                  <button
-                    className="px-2 py-1 bg-[#232b36] text-gray-100 rounded disabled:opacity-50 hover:border-cyan-400 border-2 border-[#232b36] transition"
-                    onClick={handleNextPage}
-                    disabled={history.length < limit || loading}
-                  >下一页</button>
-                </div>
                 {loading ? (
                   <p className="text-gray-500 text-center py-6">加载中...</p>
                 ) : history.length === 0 ? (
@@ -718,6 +699,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                         <img
                           src={`/api/get_photo/${item.file_id}?thumb=1`}
                           alt={item.file_id}
+                          loading="lazy"
                           className={`w-full object-contain max-h-64 rounded-lg cursor-pointer transition hover:scale-105 hover:shadow-xl bg-[#232b36] ${selectMode ? 'opacity-80' : ''} ${selectMode && selected.includes(item.file_id) ? 'ring-4 ring-cyan-400 border-cyan-400' : ''}`}
                           onClick={() => {
                             if (selectMode) {
@@ -813,7 +795,21 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={closeModal}>
           <div className="bg-[#181f29] rounded-2xl shadow-2xl p-6 w-full max-w-md relative" onClick={e => e.stopPropagation()}>
             <button className="absolute top-2 right-2 text-gray-400 hover:text-cyan-400 text-2xl" onClick={closeModal}>×</button>
-            <img src={`/api/get_photo/${modalItem.file_id}`} alt="大图" className="w-full rounded mb-4 bg-[#232b36]" style={{maxHeight: 320, objectFit: 'contain'}} />
+            <div style={{minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+              {!imgInfo.width && (
+                <div className="w-full h-80 flex items-center justify-center bg-[#232b36] animate-pulse rounded">
+                  <span className="text-gray-400">图片加载中...</span>
+                </div>
+              )}
+              <img
+                src={`/api/get_photo/${modalItem.file_id}`}
+                alt="大图"
+                loading="lazy"
+                className="w-full rounded mb-4 bg-[#232b36]"
+                style={{maxHeight: 320, objectFit: 'contain', display: imgInfo.width ? 'block' : 'none'}}
+                onLoad={e => setImgInfo(prev => ({ ...prev, width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight }))}
+              />
+            </div>
             <div className="space-y-2">
               <div className="text-base font-bold text-gray-100 truncate">{modalItem.filename || modalItem.file_id}</div>
               <div className="text-xs text-gray-400">上传时间：{new Date(modalItem.created_at).toLocaleString()}</div>

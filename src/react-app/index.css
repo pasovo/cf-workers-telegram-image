@@ -68,4 +68,16 @@
     box-shadow: 0 0 8px #22d3ee33;
     border-radius: 8px;
   }
+  .my-masonry-grid {
+    display: flex;
+    margin-left: -12px;
+    width: auto;
+  }
+  .my-masonry-grid_column {
+    padding-left: 12px;
+    background-clip: padding-box;
+  }
+  .my-masonry-grid_column > div {
+    margin-bottom: 12px;
+  }
 }

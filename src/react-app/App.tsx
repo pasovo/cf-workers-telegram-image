@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import SparkMD5 from 'spark-md5';
-import MasonryList from 'react-masonry-list';
+import Masonry from 'react-masonry-css';
 
 // 全局弹窗组件
 function Toast({ message, type = 'info', onClose }: { message: string; type?: 'info' | 'error' | 'success'; onClose: () => void }) {
@@ -650,7 +650,16 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     );
   };
 
-  // MasonryList items准备
+  // Masonry断点配置
+  const breakpointColumnsObj = {
+    default: 6,
+    1200: 5,
+    900: 4,
+    700: 3,
+    500: 2
+  };
+
+  // Masonry items准备
   const displayItems = loading && history.length === 0
     ? Array.from({ length: 20 }, (_, i) => ({ skeleton: true, id: 'skeleton-' + i }))
     : history;
@@ -867,11 +876,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   </div>
                 ) : (
                   <div style={{ width: '100%', minHeight: 'calc(100vh - 200px)' }}>
-                    <MasonryList
-                      items={displayItems.map(renderMasonryItem)}
-                      colCount={6}
-                      gap={12}
-                    />
+                    <Masonry
+                      breakpointCols={breakpointColumnsObj}
+                      className="my-masonry-grid"
+                      columnClassName="my-masonry-grid_column"
+                    >
+                      {displayItems.map(renderMasonryItem)}
+                    </Masonry>
                     {isLoadingMore && (
                       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '16px 0' }}>
                         {Array.from({ length: 4 }, (_, i) => <SkeletonItem key={'more-' + i} />)}

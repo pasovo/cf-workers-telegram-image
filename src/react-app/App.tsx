@@ -1040,9 +1040,15 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
             <button className="absolute top-2 right-2 text-gray-400 hover:text-cyan-400 text-2xl" onClick={closeModal}>×</button>
             <div style={{minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'}}>
               {/* 加载动画，未加载完时显示 */}
-              {!imgInfo.width && (
+              {!imgInfo.width && !imgInfo.size && (
                 <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 2}} className="w-full h-80 flex items-center justify-center bg-[#232b36] animate-pulse rounded">
                   <span className="text-gray-400">图片加载中...</span>
+                </div>
+              )}
+              {/* 加载失败时显示提示 */}
+              {imgInfo.size === -1 && (
+                <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 3, background: '#232b36', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12}}>
+                  <span className="text-red-400">图片加载失败</span>
                 </div>
               )}
               <img
@@ -1051,7 +1057,16 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 loading="lazy"
                 className="w-full rounded mb-4 bg-[#232b36]"
                 style={{maxHeight: 320, objectFit: 'contain', opacity: imgInfo.width ? 1 : 0, transition: 'opacity 0.3s'}}
-                onLoad={e => setImgInfo(prev => ({ ...prev, width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight }))}
+                onLoad={e => {
+                  const target = e.currentTarget as HTMLImageElement | null;
+                  if (target && target.naturalWidth && target.naturalHeight) {
+                    setImgInfo(prev => ({ ...prev, width: target.naturalWidth, height: target.naturalHeight }));
+                  }
+                }}
+                onError={e => {
+                  setImgInfo(prev => ({ ...prev, size: -1 }));
+                  e.currentTarget.src = 'https://via.placeholder.com/400x300?text=加载失败';
+                }}
               />
             </div>
             <div className="space-y-2">

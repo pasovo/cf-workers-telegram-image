@@ -53,23 +53,8 @@
    - 右侧点击绿色的“Run workflow”按钮，直接点击即可（不用填写参数）。
    - 等待几分钟，看到绿色对勾就代表部署成功。
 
-5. **首次部署后，去 Cloudflare D1 控制台执行下面的 SQL 初始化表结构**
-   ```sql
-   CREATE TABLE IF NOT EXISTS images (
-     id INTEGER PRIMARY KEY AUTOINCREMENT,
-     file_id TEXT NOT NULL,
-     chat_id TEXT NOT NULL,
-     short_code TEXT UNIQUE NOT NULL,
-     expire_at TIMESTAMP,
-     tags TEXT,
-     filename TEXT,
-     size INTEGER,
-     visit_count INTEGER DEFAULT 0,
-     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-   );
-   ```
 
-6. **访问你的域名**
+5. **访问你的域名**
 
 ---
 

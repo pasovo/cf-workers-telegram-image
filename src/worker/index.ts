@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
 import { v4 as uuidv4 } from 'uuid';
+// 1. 引入 md5 库
+import md5 from 'md5';
 
 type Bindings = {
   TG_BOT_TOKEN: string;
@@ -53,6 +55,9 @@ app.post('/api/upload', async (c) => {
           message: '请上传有效的图片文件'
       }, { status: 400 });
   }
+  // 计算 hash
+  const arrayBuffer = await photoFile.arrayBuffer();
+  const hash = md5(new Uint8Array(arrayBuffer));
   formData.append('chat_id', TG_CHAT_ID);
   // 有效期参数
   const expireOption = formData.get('expire') as string || 'forever';
@@ -101,9 +106,9 @@ app.post('/api/upload', async (c) => {
       try {
         const size = photoFile.size;
         const stmt = DB.prepare(
-          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename, size) VALUES (?, ?, ?, ?, ?, ?, ?)' 
+          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename, size, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)' 
         );
-        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size).run();
+        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size, hash).run();
         if (!dbResult.success) {
             throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
         }
@@ -189,7 +194,6 @@ app.get('/img/:short_code', async (c) => {
     return c.text('链接已过期', 410);
   }
   // 访问计数+1
-  await DB.prepare('UPDATE images SET visit_count = visit_count + 1 WHERE short_code = ?').bind(short_code).run();
   // 删除访问日志
   // 返回原图
   const TG_BOT_TOKEN = c.env.TG_BOT_TOKEN;
@@ -302,6 +306,34 @@ app.get('/api/test-db', async (c) => {
       message: error instanceof Error ? error.message : '\u6570\u636e\u5e93\u64cd\u4f5c\u5931\u8d25'
     }, { status: 500 });
   }
+});
+
+// 3. 定期去重 API（仅管理员可用），保留最后一条
+app.post('/api/deduplicate', async (c) => {
+  // 简单鉴权
+  const token = getAuthToken(c);
+  if (!token || !globalAuthToken || token !== globalAuthToken) {
+    return c.json({ status: 'error', message: '未登录' }, { status: 401 });
+  }
+  const DB = c.env.DB;
+  // 查找重复 hash
+  const { results } = await DB.prepare('SELECT hash, COUNT(*) as n FROM images WHERE hash IS NOT NULL GROUP BY hash HAVING n > 1').all();
+  let deleted = 0;
+  let duplicates: any[] = [];
+  for (const row of results) {
+    // 保留最后一条，其余删除
+    const dups = await DB.prepare('SELECT * FROM images WHERE hash = ? ORDER BY created_at ASC').bind(row.hash).all();
+    const toDelete = dups.results.slice(0, -1); // 保留最后一条
+    const toKeep = dups.results[dups.results.length - 1];
+    for (const img of toDelete) {
+      await DB.prepare('DELETE FROM images WHERE id = ?').bind(img.id).run();
+      deleted++;
+    }
+    if (toDelete.length > 0) {
+      duplicates.push({ hash: row.hash, keep: toKeep, deleted: toDelete });
+    }
+  }
+  return c.json({ status: 'success', deleted, duplicates });
 });
 
 let globalAuthToken: string | null = null;

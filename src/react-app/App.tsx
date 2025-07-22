@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import SparkMD5 from 'spark-md5';
 
 // 全局弹窗组件
 function Toast({ message, type = 'info', onClose }: { message: string; type?: 'info' | 'error' | 'success'; onClose: () => void }) {
@@ -41,7 +42,6 @@ function App() {
 
 function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed: (v: boolean) => void }) {
   const [pending, setPending] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string; tags?: string; filename?: string }>>([]);
   const [search] = useState('');
   const [loading, setLoading] = useState(false);
@@ -52,7 +52,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [selected, setSelected] = useState<string[]>([]); // 多选 file_id
   const [tagFilter, setTagFilter] = useState('');
   const [filenameFilter] = useState('');
-  const [files, setFiles] = useState<File[]>([]); // 多文件队列
+  const [files, setFiles] = useState<File[]>([]); // 待上传文件队列
   const [stats, setStats] = useState<{ total: number; size: number; hot: any[] }>({ total: 0, size: 0, hot: [] });
   const [dragActive, setDragActive] = useState(false);
   type TabType = 'upload' | 'gallery' | 'settings';
@@ -61,7 +61,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [fade, setFade] = useState(true);
   const [enter, setEnter] = useState(false);
   const [settings, setSettings] = useState<any>(null);
-  // 瀑布流弹窗相关
+  // 弹窗相关
   const [modalOpen, setModalOpen] = useState(false);
   const [modalItem, setModalItem] = useState<any>(null);
   const openModal = (item: any) => { setModalItem(item); setModalOpen(true); };
@@ -70,13 +70,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [imgInfo, setImgInfo] = useState<{ width: number; height: number; size: number }>({ width: 0, height: 0, size: 0 });
   const [selectMode, setSelectMode] = useState(false);
 
-  // 标签按钮相关
+  // 标签相关
   const [tagOptions, setTagOptions] = useState<string[]>(['默认']);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTag, setNewTag] = useState('');
 
-  // 页面标题和网站图标设置
+  // 页面标题和网站图标
   const [pageTitle, setPageTitle] = useState<string>(() => localStorage.getItem('pageTitle') || '图床');
   const [faviconUrl, setFaviconUrl] = useState<string>(() => localStorage.getItem('faviconUrl') || '/favicon.ico');
   const [titleInput, setTitleInput] = useState(pageTitle);
@@ -250,6 +250,33 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     });
   };
 
+  // 计算文件 hash 的工具函数
+  const calcFileHash = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const chunkSize = 2 * 1024 * 1024; // 2MB
+      const chunks = Math.ceil(file.size / chunkSize);
+      let currentChunk = 0;
+      const spark = new SparkMD5.ArrayBuffer();
+      const fileReader = new FileReader();
+      fileReader.onload = e => {
+        spark.append(e.target!.result as ArrayBuffer);
+        currentChunk++;
+        if (currentChunk < chunks) {
+          loadNext();
+        } else {
+          resolve(spark.end());
+        }
+      };
+      fileReader.onerror = () => reject('hash error');
+      function loadNext() {
+        const start = currentChunk * chunkSize;
+        const end = Math.min(start + chunkSize, file.size);
+        fileReader.readAsArrayBuffer(file.slice(start, end));
+      }
+      loadNext();
+    });
+  };
+
   // 上传队列处理
   // 1. 设置页支持自定义最大并发上传数
   const [maxConcurrentUploads, setMaxConcurrentUploads] = useState(() => Number(localStorage.getItem('maxConcurrentUploads')) || 3);
@@ -257,24 +284,27 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const uploadQueueRef = useRef<File[]>([]);
   const [uploadingIdx, setUploadingIdx] = useState<number[]>([]); // 正在上传的索引
   const [failedIdx, setFailedIdx] = useState<number[]>([]); // 上传失败的索引
+  const [totalProgress, setTotalProgress] = useState(0);
 
   // 单文件上传逻辑，供多线程上传队列调用
+  // 修改 uploadFile，上传时带 hash 字段
   const uploadFile = async (file: File) => {
     let uploadFile = file;
     if (file.size > 10 * 1024 * 1024) {
-      setToast({ message: '图片大于10MB，自动压缩中...', type: 'info' });
       uploadFile = await compressImage(file);
       if (uploadFile.size > 10 * 1024 * 1024) {
         setToast({ message: '图片压缩后仍大于10MB，无法上传', type: 'error' });
         throw new Error('图片过大');
       }
     }
+    const hash = await calcFileHash(uploadFile);
     const formData = new FormData();
     formData.append('photo', uploadFile);
     formData.append('expire', expire);
     const tagsToUpload = selectedTags.length > 0 ? selectedTags : ['默认'];
     formData.append('tags', tagsToUpload.join(','));
     formData.append('filename', uploadFile.name);
+    formData.append('hash', hash);
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/upload');
@@ -308,6 +338,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     uploadQueueRef.current = files.slice();
     setUploadingIdx([]);
     setFailedIdx([]);
+    setTotalProgress(0);
     let active = 0;
     let finished = 0;
     const total = files.length;
@@ -322,7 +353,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       try {
         await uploadFile(file);
         setUploadingIdx(prev => prev.filter(i => i !== idx));
-        // 上传成功立即刷新历史
         fetchHistory(search, tagFilter, filenameFilter);
       } catch {
         setUploadingIdx(prev => prev.filter(i => i !== idx));
@@ -330,6 +360,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       }
       active--;
       finished++;
+      setTotalProgress(Math.round((finished / total) * 100));
       if (finished < total) next();
     };
     // 启动并发上传
@@ -339,12 +370,8 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     // 上传成功的图片从队列移除，失败的保留
     setFiles(prev => prev.filter((_, i) => failedIdx.includes(i)));
     setPending(false);
-    setUploadProgress(0);
+    setTotalProgress(0);
   };
-
-  // 回车搜索
-  // 分页按钮
-  // 删除 handlePrevPage、handleNextPage 相关函数和所有调用
 
   // 复制短链/Markdown/HTML
   const handleCopy = async (text: string) => {
@@ -664,12 +691,15 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   </button>
                 ))}
                 {/* 上传进度条 */}
-                {pending && (
-                  <div className="w-full h-3 bg-gray-700 rounded overflow-hidden animate-pulse">
-                    <div
-                      className="h-full bg-blue-500 transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
+                {pending && files.length > 0 && (
+                  <div className="w-full mb-2">
+                    <div className="w-full h-3 bg-gray-700 rounded overflow-hidden animate-pulse">
+                      <div
+                        className="h-full bg-blue-500 transition-all duration-300"
+                        style={{ width: `${totalProgress}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1 text-center">{totalProgress}%（{totalProgress === 100 ? '全部完成' : '上传中...'}）</div>
                   </div>
                 )}
                 <div className="pt-2">

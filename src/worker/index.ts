@@ -264,12 +264,10 @@ app.get('/api/history', async (c) => {
 app.get('/api/stats', async (c) => {
   const { DB } = c.env;
   const total = await DB.prepare('SELECT COUNT(*) as n, COALESCE(SUM(size),0) as size FROM images').first();
-  const hot = await DB.prepare('SELECT * FROM images ORDER BY visit_count DESC LIMIT 5').all();
   return c.json({
     status: 'success',
     total: total?.n || 0,
-    size: total?.size || 0,
-    hot: hot?.results || []
+    size: total?.size || 0
   });
 });
 // 设置API

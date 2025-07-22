@@ -40,6 +40,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
 
+      - name: Deploy empty Worker (first time only)
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+
       - name: Set all secrets
         run: |
           echo "${{ secrets.TG_BOT_TOKEN }}" | npx wrangler secret put TG_BOT_TOKEN

@@ -130,10 +130,15 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     }
   }, [pageTitle, faviconUrl]);
 
-  // 选择图片时，若图片大于10MB，自动压缩后再加入 files 队列
+  // 压缩提示状态
+  const [compressing, setCompressing] = useState(false);
+
+  // 选择图片时，若图片大于10MB，自动压缩后再加入 files 队列，并显示压缩提示
   const handleAddFiles = async (fileList: FileList | File[]) => {
     const arr = Array.from(fileList).filter(f => f.type.startsWith('image/'));
     const processedFiles: File[] = [];
+    let needCompress = arr.some(f => f.size > 10 * 1024 * 1024);
+    if (needCompress) setCompressing(true);
     for (const f of arr) {
       if (f.size > 10 * 1024 * 1024) {
         const compressed = await compressImage(f);
@@ -152,6 +157,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const newFiles = processedFiles.filter(f => !existing.has(f.name + '_' + f.size));
       return [...prev, ...newFiles];
     });
+    if (needCompress) setCompressing(false);
   };
 
   // input 选择
@@ -258,23 +264,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     });
   };
 
-  // 上传单个文件，增加重试机制
-  const uploadFile = async (file: File, maxRetries = 3) => {
-    let uploadFile = file;
-    if (file.size > 10 * 1024 * 1024) {
-      uploadFile = await compressImage(file);
-      if (uploadFile.size > 10 * 1024 * 1024) {
-        setToast({ message: '图片压缩后仍大于10MB，无法上传', type: 'error' });
-        throw new Error('图片过大');
-      }
-    }
-    const hash = await calcFileHash(uploadFile);
+  // 上传单个文件，hash 作为参数传入，后端只记录
+  const uploadFile = async (file: File, hash: string, maxRetries = 3) => {
     const formData = new FormData();
-    formData.append('photo', uploadFile);
+    formData.append('photo', file);
     formData.append('expire', expire);
     const tagsToUpload = selectedTags.length > 0 ? selectedTags : ['默认'];
     formData.append('tags', tagsToUpload.join(','));
-    formData.append('filename', uploadFile.name);
+    formData.append('filename', file.name);
     formData.append('hash', hash);
     formData.append('folder', selectedFolder || '/');
     let attempt = 0;
@@ -304,16 +301,16 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
           };
           xhr.send(formData);
         });
-        return; // 成功则直接返回
+        return;
       } catch (err) {
         attempt++;
         if (attempt >= maxRetries) throw err;
-        await new Promise(r => setTimeout(r, 500 * attempt)); // 递增延迟重试
+        await new Promise(r => setTimeout(r, 500 * attempt));
       }
     }
   };
 
-  // 上传队列相关，确保并发上传时不会上传重复图片
+  // 上传队列相关，前端 hash 去重，后端只记录
   const handleUploadAll = async () => {
     if (files.length === 0) return;
     setPending(true);
@@ -330,10 +327,9 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const idx = files.length - uploadQueueRef.current.length;
       const file = uploadQueueRef.current.shift();
       if (!file) return;
-      // 计算 hash，确保同一张图片不会被多次上传
+      // 只在前端计算 hash 去重，后端只记录
       const hash = await calcFileHash(file);
       if (localUploadingHashes.has(hash)) {
-        // 已经在本轮上传队列中，跳过
         finished++;
         setTotalProgress(Math.round((finished / total) * 100));
         next();
@@ -342,7 +338,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       localUploadingHashes.add(hash);
       active++;
       try {
-        await uploadFile(file);
+        await uploadFile(file, hash);
         setFailedIdx(prev => prev.filter(i => i !== idx));
       } catch {
         setFailedIdx(prev => [...prev, idx]);
@@ -352,15 +348,12 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       setTotalProgress(Math.round((finished / total) * 100));
       if (finished < total) next();
     };
-    // 启动并发上传
     for (let i = 0; i < maxConcurrentUploads; i++) next();
-    // 等待全部完成
     while (finished < total) await new Promise(r => setTimeout(r, 100));
-    // 上传成功的图片从队列移除，失败的保留
     setFiles(prev => prev.filter((_, i) => failedIdx.includes(i)));
     setPending(false);
     setTotalProgress(0);
-    localUploadingHashes.clear(); // 上传完成后清空
+    localUploadingHashes.clear();
   };
 
   // 复制短链/Markdown/HTML
@@ -905,6 +898,10 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     </div>
                     <div className="text-xs text-gray-400 mt-1 text-center">{totalProgress}%（{totalProgress === 100 ? '全部完成' : '上传中...'}）</div>
                   </div>
+                )}
+                {/* 批量上传按钮下方显示压缩提示 */}
+                {compressing && (
+                  <div className="w-full text-center text-cyan-400 py-2">正在压缩大图片，请稍候...</div>
                 )}
                 <div className="pt-2">
                   <button

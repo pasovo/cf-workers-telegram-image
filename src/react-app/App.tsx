@@ -130,17 +130,30 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     }
   }, [pageTitle, faviconUrl]);
 
-  // 处理文件添加（多选、拖拽、粘贴）
-  // 修改 handleAddFiles，自动去重
-  const handleAddFiles = (fileList: FileList | File[]) => {
+  // 选择图片时，若图片大于10MB，自动压缩后再加入 files 队列
+  const handleAddFiles = async (fileList: FileList | File[]) => {
     const arr = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    const processedFiles: File[] = [];
+    for (const f of arr) {
+      if (f.size > 10 * 1024 * 1024) {
+        const compressed = await compressImage(f);
+        if (compressed.size <= 10 * 1024 * 1024) {
+          processedFiles.push(compressed);
+        } else {
+          setToast({ message: `${f.name} 压缩后仍大于10MB，无法添加`, type: 'error' });
+        }
+      } else {
+        processedFiles.push(f);
+      }
+    }
     setFiles(prev => {
       // 按文件名和大小去重
       const existing = new Set(prev.map(f => f.name + '_' + f.size));
-      const newFiles = arr.filter(f => !existing.has(f.name + '_' + f.size));
+      const newFiles = processedFiles.filter(f => !existing.has(f.name + '_' + f.size));
       return [...prev, ...newFiles];
     });
   };
+
   // input 选择
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) handleAddFiles(e.target.files);

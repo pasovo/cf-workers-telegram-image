@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
 import { v4 as uuidv4 } from 'uuid';
 import md5 from 'md5';
+import { sign, verify } from 'hono/jwt';
 
 type Bindings = {
   TG_BOT_TOKEN: string;
@@ -11,6 +12,8 @@ type Bindings = {
   ADMIN_PASS: string;
   SHORTLINK_DOMAIN?: string;
 };
+
+const JWT_SECRET = 'your-secret-key'; // 建议用环境变量
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -37,6 +40,14 @@ function getBaseUrl(env: Bindings, req: any) {
   return env.SHORTLINK_DOMAIN || (host ? `${proto}://${host}` : '');
 }
 
+// 全局 CORS 支持
+app.use('*', async (c, next) => {
+  await next();
+  c.header('Access-Control-Allow-Origin', '*');
+  c.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  c.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+});
+
 // 上传图片处理（支持有效期、短链、标签、文件名、统计、文件夹）
 app.post('/api/upload', async (c) => {
   const { TG_BOT_TOKEN, TG_CHAT_ID, DB } = c.env;
@@ -57,6 +68,12 @@ app.post('/api/upload', async (c) => {
           status: 'error',
           message: '请上传有效的图片文件'
       }, { status: 400 });
+  }
+  if (!photoFile.type.startsWith('image/')) {
+    return c.json({ status: 'error', message: '只支持上传图片类型' }, { status: 400 });
+  }
+  if (photoFile.size > 10 * 1024 * 1024) {
+    return c.json({ status: 'error', message: '单个文件不能超过10MB' }, { status: 400 });
   }
   // 计算 hash
   const arrayBuffer = await photoFile.arrayBuffer();
@@ -80,9 +97,12 @@ app.post('/api/upload', async (c) => {
   const tags = (formData.get('tags') as string || '').trim();
   let filename = (formData.get('filename') as string || '').trim();
   if (filename) filename = sanitizeFilename(filename);
+  if (!filename) filename = `photo_${Date.now()}`;
   // 文件夹参数
   let folder = (formData.get('folder') as string || '').trim();
   if (!folder) folder = '/';
+  if (folder) folder = sanitizeFilename(folder);
+  console.log(`[UPLOAD] user=${c.get('jwtPayload')?.user || '-'} filename=${filename} size=${photoFile.size} time=${Date.now()}`);
   try {
     const tgStart = Date.now();
     const response = await fetch(
@@ -92,10 +112,21 @@ app.post('/api/upload', async (c) => {
     const tgApiTime = Date.now() - tgStart;
     if (!response.ok) {
       const errorDetails = await response.text();
-      console.error('Telegram API错误:', errorDetails);
+      let description = '';
+      try {
+        const errJson = JSON.parse(errorDetails);
+        description = errJson.description || '';
+      } catch {}
+      console.error('Telegram API错误:', {
+        status_code: response.status,
+        description,
+        raw: errorDetails
+      });
       return c.json({
         status: 'error',
         message: 'Telegram API调用失败',
+        status_code: response.status,
+        description,
         details: errorDetails,
         tg_api_time: tgApiTime,
         request_size: requestSize
@@ -197,10 +228,11 @@ app.post('/api/delete', async (c) => {
   if (!Array.isArray(ids) || ids.length === 0) {
     return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
   }
+  console.log(`[DELETE] user=${c.get('jwtPayload')?.user || '-'} ids=${ids.join(',')} time=${Date.now()}`);
   try {
-    for (const id of ids) {
-      await DB.prepare('DELETE FROM images WHERE file_id = ?').bind(id).run();
-    }
+    // 用 batch 批量执行所有删除 SQL
+    const stmts = ids.map(id => DB.prepare('DELETE FROM images WHERE file_id = ?').bind(id));
+    await DB.batch(stmts);
     return c.json({ status: 'success' });
   } catch (error) {
     return c.json({ status: 'error', message: error instanceof Error ? error.message : String(error) }, { status: 500 });
@@ -233,10 +265,11 @@ app.get('/img/:short_code', async (c) => {
       `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`
     );
     const imageRes = await imageResponse.arrayBuffer();
+    const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
     return new Response(imageRes, {
       status: 200,
       headers: {
-        'Content-Type': 'image/png',
+        'Content-Type': contentType,
         'Cache-Control': 'public, max-age=31536000'
       },
     });
@@ -303,8 +336,8 @@ app.get('/api/stats', async (c) => {
 // 设置API
 app.get('/api/settings', async (c) => {
   // 鉴权
-  const token = getAuthToken(c);
-  if (!token || !globalAuthToken || token !== globalAuthToken) {
+  const user = c.get('jwtPayload');
+  if (!user) {
     return c.json({ status: 'error', message: '未登录' }, { status: 401 });
   }
   const DB = c.env.DB;
@@ -339,8 +372,8 @@ app.get('/api/test-db', async (c) => {
 // 3. 定期去重 API（仅管理员可用），保留最后一条
 app.post('/api/deduplicate', async (c) => {
   // 简单鉴权
-  const token = getAuthToken(c);
-  if (!token || !globalAuthToken || token !== globalAuthToken) {
+  const user = c.get('jwtPayload');
+  if (!user) {
     return c.json({ status: 'error', message: '未登录' }, { status: 401 });
   }
   const DB = c.env.DB;
@@ -378,9 +411,10 @@ app.post('/api/move', async (c) => {
   if (!Array.isArray(ids) || typeof folder !== 'string') {
     return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
   }
+  let folderSan = typeof folder === 'string' ? sanitizeFilename(folder) : folder;
   try {
     for (const id of ids) {
-      await DB.prepare('UPDATE images SET folder = ? WHERE file_id = ?').bind(folder, id).run();
+      await DB.prepare('UPDATE images SET folder = ? WHERE file_id = ?').bind(folderSan, id).run();
     }
     return c.json({ status: 'success' });
   } catch (error) {
@@ -456,53 +490,38 @@ app.get('/api/gallery_overview', async (c) => {
 });
 
 
-let globalAuthToken: string | null = null;
-
-function getAuthToken(c: any) {
-  const cookie = c.req.header('cookie') || '';
-  const match = cookie.match(/auth_token=([^;]+)/);
-  return match ? match[1] : '';
-}
-
-function setAuthCookie(token: string) {
-  // 7天有效期
-  return `auth_token=${token}; Path=/; HttpOnly; Max-Age=604800; SameSite=Strict`;
-}
-
 // 登录接口
 app.post('/api/login', async (c) => {
+  const { ADMIN_USER, ADMIN_PASS } = c.env;
   const { username, password } = await c.req.json();
-  if (username === c.env.ADMIN_USER && password === c.env.ADMIN_PASS) {
-    // 生成随机 token
-    const token = uuidv4();
-    globalAuthToken = token;
-    return c.json({ status: 'success' }, {
-      headers: { 'Set-Cookie': setAuthCookie(token) }
-    });
+  if (username !== ADMIN_USER || password !== ADMIN_PASS) {
+    return c.json({ status: 'error', message: '用户名或密码错误' }, { status: 401 });
   }
-  return c.json({ status: 'error', message: '用户名或密码错误' }, { status: 401 });
+  const token = await sign({ user: username, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 }, JWT_SECRET);
+  c.header('Set-Cookie', `token=${token}; HttpOnly; Path=/; SameSite=Strict;`);
+  return c.json({ status: 'success' });
+});
+
+// 鉴权中间件
+app.use('/api', async (c, next) => {
+  if (c.req.path === '/api/login' || c.req.path === '/api/logout' || c.req.path === '/api/settings') return await next();
+  const cookie = c.req.header('cookie') || '';
+  const match = cookie.match(/token=([^;]+)/);
+  const token = match ? match[1] : '';
+  if (!token) return c.json({ status: 'error', message: '未登录' }, { status: 401 });
+  try {
+    const payload = await verify(token, JWT_SECRET);
+    c.set('jwtPayload', payload);
+    await next();
+  } catch {
+    return c.json({ status: 'error', message: '无效token' }, { status: 401 });
+  }
 });
 
 // 登出接口
 app.post('/api/logout', async (c) => {
-  globalAuthToken = null;
-  return c.json({ status: 'success' }, {
-    headers: { 'Set-Cookie': 'auth_token=; Path=/; HttpOnly; Max-Age=0; SameSite=Strict' }
-  });
-});
-
-// 需要登录的API统一校验
-app.use('/api/', async (c, next) => {
-  // 允许 /api/login /api/logout /api/settings 不校验
-  const url = c.req.url;
-  if (url.includes('/api/login') || url.includes('/api/logout') || url.includes('/api/settings')) return await next();
-  const token = getAuthToken(c);
-  if (!token || !globalAuthToken || token !== globalAuthToken) {
-    return c.json({ status: 'error', message: '未登录' }, { status: 401 });
-  }
-  // 刷新cookie时效
-  c.header('Set-Cookie', setAuthCookie(token));
-  await next();
+  c.header('Set-Cookie', 'token=; Path=/; HttpOnly; Max-Age=0; SameSite=Strict;');
+  return c.json({ status: 'success' });
 });
 
 export default app;

@@ -1,37 +1,27 @@
-import React, { useState, useRef, useEffect } from 'react';
-import SparkMD5 from 'spark-md5';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Masonry from 'react-masonry-css';
-
-// 全局弹窗组件
-function Toast({ message, type = 'info', onClose }: { message: string; type?: 'info' | 'error' | 'success'; onClose: () => void }) {
-  // 不再用 useEffect 依赖 ErrorBoundary
-  React.useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(onClose, 2500);
-    return () => clearTimeout(timer);
-  }, [message, onClose]);
-  if (!message) return null;
-  let bg = 'bg-blue-600';
-  if (type === 'error') bg = 'bg-red-600';
-  if (type === 'success') bg = 'bg-green-600';
-  return (
-    <div className={`fixed top-6 left-1/2 z-50 -translate-x-1/2 px-6 py-3 rounded shadow-lg text-white text-base font-medium ${bg} animate-fade-in`} style={{minWidth: 200, maxWidth: '90vw'}}>
-      {message}
-    </div>
-  );
-}
+import Toast from './components/Toast';
+import FolderSelector from './components/FolderSelector';
+import TagSelector from './components/TagSelector';
+import UploadPreview from './components/UploadPreview';
+import ImageCard from './components/ImageCard';
+import ImageModal from './components/ImageModal';
+import { compressImage, handleUploadAll } from './utils/uploadManager';
 
 function App() {
   const [authChecked, setAuthChecked] = React.useState(false);
   const [isAuthed, setIsAuthed] = React.useState(false);
 
-  React.useEffect(() => {
-    fetch('/api/settings', { credentials: 'include' })
+  // 在 useEffect 检查登录状态时加 AbortController
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/settings', { credentials: 'include', signal: controller.signal })
       .then(res => {
         if (res.status === 401) setIsAuthed(false);
         else setIsAuthed(true);
       })
       .finally(() => setAuthChecked(true));
+    return () => controller.abort();
   }, []);
 
   if (!authChecked) {
@@ -46,13 +36,19 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginPending, setLoginPending] = useState(false);
-  const [pending, setPending] = useState(false);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string; tags?: string; filename?: string }>>([]);
   const [search] = useState('');
-  const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' }>({ message: '' });
+  // Toast 状态，带默认 type
+  const [toast, setToast] = useState<{ message: string; type: 'info' | 'error' | 'success' }>({ message: '', type: 'info' });
+  // 统一的 toast 工具函数，保证 type 总有默认值
+  const showToast = (toast: { message: string; type?: 'info' | 'error' | 'success' }) => {
+    setToast({
+      message: toast.message,
+      type: toast.type ?? 'info',
+    });
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expire, setExpire] = useState('forever');
-  const SHORTLINK_DOMAIN = (window as any).SHORTLINK_DOMAIN || '';
   const [selected, setSelected] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState('');
   const [filenameFilter] = useState('');
@@ -62,23 +58,19 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [tab, setTab] = useState<TabType>('upload');
   const [modalOpen, setModalOpen] = useState(false);
   const [modalItem, setModalItem] = useState<any>(null);
-  const [imgInfo, setImgInfo] = useState<{ width: number; height: number; size: number }>({ width: 0, height: 0, size: 0 });
   const [selectMode, setSelectMode] = useState(false);
   const [tagOptions, setTagOptions] = useState<string[]>(['默认']);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showAddTag, setShowAddTag] = useState(false);
   const [newTag, setNewTag] = useState('');
-  const [pageTitle, setPageTitle] = useState<string>('图床');
-  const [faviconUrl, setFaviconUrl] = useState<string>('/favicon.ico');
+  const [pageTitle, setPageTitle] = useState(() => localStorage.getItem('pageTitle') || '图床');
+  const [faviconUrl, setFaviconUrl] = useState(() => localStorage.getItem('faviconUrl') || '/favicon.ico');
   const [titleInput, setTitleInput] = useState('图床');
   const [faviconFile, setFaviconFile] = useState<File|null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const LIMIT = 20;
   const [maxConcurrentUploads, setMaxConcurrentUploads] = useState(3);
-  const uploadQueueRef = useRef<File[]>([]);
-  const [failedIdx, setFailedIdx] = useState<number[]>([]);
-  const [totalProgress, setTotalProgress] = useState(0);
   const [folderList, setFolderList] = useState<string[]>(['/']);
   const [selectedFolder, setSelectedFolder] = useState<string>('/');
   const [newFolder, setNewFolder] = useState('');
@@ -86,35 +78,24 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [renameFolder, setRenameFolder] = useState('');
   const [showRenameInput, setShowRenameInput] = useState(false);
 
-  // 预览图片用到的 URL 映射，避免重复 createObjectURL
-  const [fileUrls, setFileUrls] = useState<Map<string, string>>(new Map());
-
-  // 监听 files 队列变化，自动生成和释放 URL
-  useEffect(() => {
-    // 新增的 file 生成 URL
-    setFileUrls(prev => {
-      const next = new Map(prev);
-      files.forEach(file => {
-        const key = file.name + '_' + file.size;
-        if (!next.has(key)) {
-          next.set(key, URL.createObjectURL(file));
-        }
-      });
-      // 移除已删除的 file 的 URL
-      for (const key of next.keys()) {
-        if (!files.find(f => f.name + '_' + f.size === key)) {
-          URL.revokeObjectURL(next.get(key)!);
-          next.delete(key);
-        }
-      }
-      return next;
-    });
-    // 清理函数：组件卸载时释放所有 URL
-    return () => {
-      fileUrls.forEach(url => URL.revokeObjectURL(url));
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // 集中管理 fileUrls，防止内存泄漏
+  const fileUrlsRef = useRef<string[]>([]);
+  const fileUrls = useMemo(() => {
+    // 先回收所有旧 URL
+    fileUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    // 生成新 URL
+    const urls = files.map(file => URL.createObjectURL(file));
+    fileUrlsRef.current = urls;
+    return urls;
   }, [files]);
+
+  useEffect(() => {
+    // 组件卸载时回收所有 URL
+    return () => {
+      fileUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      fileUrlsRef.current = [];
+    };
+  }, []);
 
   // 页面标题和favicon同步
   useEffect(() => {
@@ -145,7 +126,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         if (compressed.size <= 10 * 1024 * 1024) {
           processedFiles.push(compressed);
         } else {
-          setToast({ message: `${f.name} 压缩后仍大于10MB，无法添加`, type: 'error' });
+          showToast({ message: `${f.name} 压缩后仍大于10MB，无法添加`, type: 'error' });
         }
       } else {
         processedFiles.push(f);
@@ -198,171 +179,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     if (e.dataTransfer.files) handleAddFiles(e.dataTransfer.files);
   };
 
-  // 图片压缩（canvas）
-  const compressImage = (file: File, quality = 0.7, maxW = 1600, maxH = 1600): Promise<File> => {
-    return new Promise((resolve) => {
-      const img = new window.Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        let w = img.width, h = img.height;
-        if (w > maxW || h > maxH) {
-          const ratio = Math.min(maxW / w, maxH / h);
-          w = Math.round(w * ratio);
-          h = Math.round(h * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, w, h);
-        // 多次尝试压缩到10MB以下
-        const tryCompress = (q: number) => {
-          canvas.toBlob(blob => {
-            if (blob) {
-              if (blob.size <= 10 * 1024 * 1024 || q < 0.2) {
-                resolve(new File([blob], file.name, { type: blob.type }));
-              } else {
-                tryCompress(q - 0.1);
-              }
-            } else {
-              resolve(file);
-            }
-            URL.revokeObjectURL(url);
-          }, file.type, q);
-        };
-        tryCompress(quality);
-      };
-      img.onerror = () => resolve(file);
-      img.src = url;
-    });
-  };
-
-  // 计算文件 hash 的工具函数
-  const calcFileHash = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const chunkSize = 2 * 1024 * 1024; // 2MB
-      const chunks = Math.ceil(file.size / chunkSize);
-      let currentChunk = 0;
-      const spark = new SparkMD5.ArrayBuffer();
-      const fileReader = new FileReader();
-      fileReader.onload = e => {
-        spark.append(e.target!.result as ArrayBuffer);
-        currentChunk++;
-        if (currentChunk < chunks) {
-          loadNext();
-        } else {
-          resolve(spark.end());
-        }
-      };
-      fileReader.onerror = () => reject('hash error');
-      function loadNext() {
-        const start = currentChunk * chunkSize;
-        const end = Math.min(start + chunkSize, file.size);
-        fileReader.readAsArrayBuffer(file.slice(start, end));
-      }
-      loadNext();
-    });
-  };
-
-  // 上传单个文件，hash 作为参数传入，后端只记录
-  const uploadFile = async (file: File, hash: string, maxRetries = 3) => {
-    const formData = new FormData();
-    formData.append('photo', file);
-    formData.append('expire', expire);
-    const tagsToUpload = selectedTags.length > 0 ? selectedTags : ['默认'];
-    formData.append('tags', tagsToUpload.join(','));
-    formData.append('filename', file.name);
-    formData.append('hash', hash);
-    formData.append('folder', selectedFolder || '/');
-    let attempt = 0;
-    while (attempt < maxRetries) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', '/api/upload');
-          xhr.onload = () => {
-            try {
-              const res = JSON.parse(xhr.responseText);
-              if (xhr.status === 200 && res.status === 'success') {
-                setToast({ message: '图片上传成功', type: 'success' });
-                resolve();
-              } else {
-                setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
-                reject(new Error(res.message || '上传失败'));
-              }
-            } catch (err) {
-              setToast({ message: '上传失败，服务器响应异常', type: 'error' });
-              reject(err);
-            }
-          };
-          xhr.onerror = () => {
-            setToast({ message: '上传失败，请重试', type: 'error' });
-            reject(new Error('上传失败'));
-          };
-          xhr.send(formData);
-        });
-        return;
-      } catch (err) {
-        attempt++;
-        if (attempt >= maxRetries) throw err;
-        await new Promise(r => setTimeout(r, 500 * attempt));
-      }
-    }
-  };
-
-  // 上传队列相关，前端 hash 去重，后端只记录
-  const handleUploadAll = async () => {
-    if (files.length === 0) return;
-    setPending(true);
-    uploadQueueRef.current = files.slice();
-    setFailedIdx([]);
-    setTotalProgress(0);
-    let active = 0;
-    let finished = 0;
-    const total = files.length;
-    const localUploadingHashes = new Set<string>(); // 本轮上传专用
-    const next = async () => {
-      if (uploadQueueRef.current.length === 0) return;
-      if (active >= maxConcurrentUploads) return;
-      const idx = files.length - uploadQueueRef.current.length;
-      const file = uploadQueueRef.current.shift();
-      if (!file) return;
-      // 只在前端计算 hash 去重，后端只记录
-      const hash = await calcFileHash(file);
-      if (localUploadingHashes.has(hash)) {
-        finished++;
-        setTotalProgress(Math.round((finished / total) * 100));
-        next();
-        return;
-      }
-      localUploadingHashes.add(hash);
-      active++;
-      try {
-        await uploadFile(file, hash);
-        setFailedIdx(prev => prev.filter(i => i !== idx));
-      } catch {
-        setFailedIdx(prev => [...prev, idx]);
-      }
-      active--;
-      finished++;
-      setTotalProgress(Math.round((finished / total) * 100));
-      if (finished < total) next();
-    };
-    for (let i = 0; i < maxConcurrentUploads; i++) next();
-    while (finished < total) await new Promise(r => setTimeout(r, 100));
-    setFiles(prev => prev.filter((_, i) => failedIdx.includes(i)));
-    setPending(false);
-    setTotalProgress(0);
-    localUploadingHashes.clear();
-  };
-
   // 复制短链/Markdown/HTML
   const handleCopy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setToast({ message: '已复制到剪贴板', type: 'success' });
+      showToast({ message: '已复制到剪贴板', type: 'success' });
     } catch {
-      setToast({ message: '复制失败', type: 'error' });
+      showToast({ message: '复制失败', type: 'error' });
     }
   };
 
@@ -380,7 +203,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     // 立即前端移除
     setHistory(prev => prev.filter(item => !selected.includes(item.file_id)));
     setSelected([]);
-    setToast({ message: '已提交删除', type: 'info' });
+    showToast({ message: '已提交删除', type: 'info' });
     // 后台异步删除
     try {
       const res = await fetch('/api/delete', {
@@ -391,16 +214,16 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       });
       const data = await res.json();
       if (data.status === 'success') {
-        setToast({ message: '删除成功', type: 'success' });
+        showToast({ message: '删除成功', type: 'success' });
         setSelected([]);
       } else {
         // 回滚
         setHistory(prev => [...removed, ...prev]);
-        setToast({ message: '删除失败，请重试', type: 'error' });
+        showToast({ message: '删除失败，请重试', type: 'error' });
       }
     } catch {
       setHistory(prev => [...removed, ...prev]);
-      setToast({ message: '删除失败', type: 'error' });
+      showToast({ message: '删除失败', type: 'error' });
     }
   };
   // 批量导出
@@ -441,20 +264,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   React.useEffect(() => { if (isAuthed && tab === 'settings') fetchSettings(); }, [isAuthed, tab]);
 
   // 弹窗打开时获取图片尺寸和大小
-  React.useEffect(() => {
+  // 在弹窗图片加载 useEffect 里加 img.src = '' 清理
+  useEffect(() => {
     if (!modalOpen || !modalItem) return;
-    // 获取尺寸
     const img = new window.Image();
-    img.onload = () => {
-      setImgInfo(prev => ({ ...prev, width: img.naturalWidth, height: img.naturalHeight }));
-    };
+    img.onload = () => {};
     img.src = `/api/get_photo/${modalItem.file_id}`;
-    // 获取大小
-    fetch(`/api/get_photo/${modalItem.file_id}`, { credentials: 'include' })
-      .then(res => {
-        const size = Number(res.headers.get('content-length')) || 0;
-        setImgInfo(prev => ({ ...prev, size }));
-      });
+    return () => { img.src = ''; };
   }, [modalOpen, modalItem]);
 
   // 登录方法
@@ -485,7 +301,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST', credentials: 'include' });
     setIsAuthed(false);
-    setToast({ message: '已退出登录', type: 'info' });
+    showToast({ message: '已退出登录', type: 'info' });
     window.location.reload(); // 强制刷新页面，确保 cookie 失效后重新鉴权
   };
 
@@ -523,74 +339,23 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       </div>
     );
   } else {
-    // 骨架屏组件
-    const SkeletonItem = () => (
-      <div style={{
-        margin: 6,
-        borderRadius: 12,
-        background: 'linear-gradient(90deg, #232b36 60%, #2a3342 100%)',
-        height: 240,
-        width: '100%',
-        minHeight: 120,
-        minWidth: 120,
-        boxShadow: '0 2px 8px #232b3633',
-        animation: 'pulse 1.2s infinite',
-      }} />
-    );
 
     // MasonryList渲染函数
-    const renderMasonryItem = (img: any) => {
-      if (img.skeleton) return <SkeletonItem />;
-      const isSelected = selectMode && selected.includes(img.file_id);
-      return (
-        <div
-          key={img.id}
-          style={{
-            margin: 6,
-            borderRadius: 12,
-            overflow: 'hidden',
-            background: '#232b36',
-            boxShadow: isSelected ? '0 0 0 4px #22d3ee' : undefined,
-            opacity: selectMode ? 0.8 : 1,
-            cursor: 'pointer',
-            position: 'relative',
-          }}
-          onClick={() => {
-            if (selectMode) {
-              if (isSelected) setSelected(prev => prev.filter(id => id !== img.file_id));
-              else setSelected(prev => [...prev, img.file_id]);
-            } else {
-              openModal(img);
-            }
-          }}
-        >
-          <img
-            src={img.url || `/api/get_photo/${img.file_id}?thumb=1`}
-            alt={img.filename || img.file_id}
-            style={{ width: '100%', display: 'block', borderRadius: 12, maxHeight: 320, objectFit: 'cover' }}
-            loading="lazy"
-            onError={e => (e.currentTarget.src = 'https://via.placeholder.com/200?text=加载失败')}
-          />
-          {isSelected && (
-            <div style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              background: '#22d3ee',
-              color: '#fff',
-              borderRadius: '50%',
-              width: 24,
-              height: 24,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 'bold',
-              fontSize: 16,
-            }}>✓</div>
-          )}
-        </div>
-      );
-    };
+    const renderMasonryItem = (img: any) => (
+      <ImageCard
+        img={img}
+        isSelected={selectMode && selected.includes(img.file_id)}
+        selectMode={selectMode}
+        onClick={() => {
+          if (selectMode) {
+            if (selected.includes(img.file_id)) setSelected(prev => prev.filter(id => id !== img.file_id));
+            else setSelected(prev => [...prev, img.file_id]);
+          } else {
+            openModal(img);
+          }
+        }}
+      />
+    );
 
     // Masonry断点配置
     const breakpointColumnsObj = {
@@ -618,14 +383,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         });
         const data = await res.json();
         if (data.status === 'success') {
-          setToast({ message: '移动成功', type: 'success' });
+          showToast({ message: '移动成功', type: 'success' });
           // fetchHistory(search, tagFilter, filenameFilter, page, false); // 移除旧的 fetchHistory 调用
           setSelected([]);
         } else {
-          setToast({ message: data.message || '移动失败', type: 'error' });
+          showToast({ message: data.message || '移动失败', type: 'error' });
         }
       } catch {
-        setToast({ message: '移动失败', type: 'error' });
+        showToast({ message: '移动失败', type: 'error' });
       }
     };
 
@@ -643,7 +408,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         });
         const data = await res.json();
         if (data.status === 'success') {
-          setToast({ message: '重命名成功', type: 'success' });
+          showToast({ message: '重命名成功', type: 'success' });
           // fetchFolders(); // 移除旧的 fetchFolders 调用
           if (selectedFolder === oldName) setSelectedFolder(newName);
           setShowRenameInput(false);
@@ -653,10 +418,10 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
             fetchGalleryOverview(selectedFolder, 1);
           }
         } else {
-          setToast({ message: data.message || '重命名失败', type: 'error' });
+          showToast({ message: data.message || '重命名失败', type: 'error' });
         }
       } catch {
-        setToast({ message: '重命名失败', type: 'error' });
+        showToast({ message: '重命名失败', type: 'error' });
       }
     };
     // 删除文件夹
@@ -672,7 +437,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         });
         const data = await res.json();
         if (data.status === 'success') {
-          setToast({ message: '删除成功', type: 'success' });
+          showToast({ message: '删除成功', type: 'success' });
           // fetchFolders(); // 移除旧的 fetchFolders 调用
           setSelectedFolder('/');
           // 刷新图库
@@ -680,10 +445,10 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
             fetchGalleryOverview(selectedFolder, 1);
           }
         } else {
-          setToast({ message: data.message || '删除失败', type: 'error' });
+          showToast({ message: data.message || '删除失败', type: 'error' });
         }
       } catch {
-        setToast({ message: '删除失败', type: 'error' });
+        showToast({ message: '删除失败', type: 'error' });
       }
     };
 
@@ -702,11 +467,42 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
           setFolderList(data.folders);
           setHistory(data.images);
           setHasMore(data.images.length >= LIMIT);
+          return data; // 返回数据以便缓存
         }
-      } catch {}
+        return null; // 失败则返回 null
+      } catch {
+        return null; // 网络错误则返回 null
+      }
     };
-    // 替换fetchFolders和fetchHistory的调用为fetchGalleryOverview
-    useEffect(() => { if (isAuthed) fetchGalleryOverview(selectedFolder, 1); }, [isAuthed, tab, selectedFolder, tagFilter, filenameFilter, search]);
+
+    // fetchGalleryOverview 缓存和防抖
+    const galleryCacheRef = useRef(new Map());
+    const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+      if (!isAuthed) return;
+      const cacheKey = JSON.stringify({ folder: selectedFolder, tab, tagFilter, filenameFilter, search });
+      if (galleryCacheRef.current.has(cacheKey)) {
+        // 命中缓存，直接用缓存数据
+        setHistory(galleryCacheRef.current.get(cacheKey).images);
+        setFolderList(galleryCacheRef.current.get(cacheKey).folders);
+        setHasMore(galleryCacheRef.current.get(cacheKey).images.length >= LIMIT);
+        return;
+      }
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(async () => {
+        const data = await fetchGalleryOverview(selectedFolder, 1);
+        if (data) { // 确保数据成功获取
+          galleryCacheRef.current.set(cacheKey, data);
+          setHistory(data.images);
+          setFolderList(data.folders);
+          setHasMore(data.images.length >= LIMIT);
+        }
+      }, 400);
+      return () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+      };
+    }, [isAuthed, tab, selectedFolder, tagFilter, filenameFilter, search]);
 
     // 事件处理函数也无条件声明在顶层
     const openModal = (item: any) => { setModalItem(item); setModalOpen(true); };
@@ -743,7 +539,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
           </div>
           <div className="min-w-[120px]"></div>
         </nav>
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'info' })} />
         <div className={`fade-content`} key={tab}>
           {tab==='upload' && (
             <div
@@ -770,106 +566,39 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   ref={fileInputRef}
                 />
               </div>
-              <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
-                {/* 文件夹选择栏，移动到这里 */}
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm text-gray-300">文件夹：</span>
-                  <select
-                    className="bg-[#232b36] text-gray-100 border rounded px-2 py-1"
-                    value={selectedFolder}
-                    onChange={e => {
-                      setSelectedFolder(e.target.value);
-                      setPage(1);
-                      setHasMore(true);
-                      fetchGalleryOverview(e.target.value, 1);
-                    }}
-                  >
-                    {folderList.map(folder => (
-                      <option key={folder} value={folder}>{folder}</option>
-                    ))}
-                  </select>
-                  <button
-                    className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300 border ml-2"
-                    onClick={() => setShowAddFolder(v => !v)}
-                    type="button"
-                  >新建</button>
-                  {showAddFolder && (
-                    <input
-                      className="ml-2 border rounded px-2 py-1 bg-[#232b36] text-gray-100"
-                      placeholder="新文件夹名"
-                      value={newFolder}
-                      onChange={e => setNewFolder(e.target.value)}
-                      onBlur={() => setShowAddFolder(false)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && newFolder.trim()) {
-                          const name = newFolder.trim();
-                          if (!folderList.includes(name)) setFolderList(prev => [...prev, name]);
-                          setSelectedFolder(name);
-                          setNewFolder('');
-                          setShowAddFolder(false);
-                          setPage(1);
-                          setHasMore(true);
-                          fetchGalleryOverview(name, 1);
-                        }
-                      }}
-                      autoFocus
-                    />
-                  )}
-                  {selectedFolder !== '/' && (
-                    <>
-                      <button className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-yellow-600 text-yellow-300 border ml-2" onClick={() => { setShowRenameInput(true); setRenameFolder(selectedFolder); }} type="button">重命名</button>
-                      <button className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-red-600 text-red-300 border ml-2" onClick={() => handleDeleteFolder(selectedFolder)} type="button">删除</button>
-                    </>
-                  )}
-                  {showRenameInput && (
-                    <input
-                      className="ml-2 border rounded px-2 py-1 bg-[#232b36] text-gray-100"
-                      placeholder="新文件夹名"
-                      value={renameFolder}
-                      onChange={e => setRenameFolder(e.target.value)}
-                      onBlur={() => setShowRenameInput(false)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && renameFolder.trim()) {
-                          handleRenameFolder(selectedFolder, renameFolder.trim());
-                        }
-                      }}
-                      autoFocus
-                    />
-                  )}
-                </div>
+              <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(files, { expire, tags: selectedTags.length > 0 ? selectedTags : ['默认'], folder: selectedFolder || '/', maxConcurrentUploads }); }}>
+                {/* 文件夹选择栏，已抽离为组件 */}
+                <FolderSelector
+                  folderList={folderList}
+                  selectedFolder={selectedFolder}
+                  onFolderChange={folder => {
+                    setSelectedFolder(folder);
+                    setPage(1);
+                    setHasMore(true);
+                    fetchGalleryOverview(folder, 1);
+                  }}
+                  onRename={handleRenameFolder}
+                  onDelete={handleDeleteFolder}
+                  showAddFolder={showAddFolder}
+                  setShowAddFolder={setShowAddFolder}
+                  newFolder={newFolder}
+                  setNewFolder={setNewFolder}
+                  showRenameInput={showRenameInput}
+                  setShowRenameInput={setShowRenameInput}
+                  renameFolder={renameFolder}
+                  setRenameFolder={setRenameFolder}
+                />
                 {/* 标签输入 */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm text-gray-300">标签：</span>
-                  {tagOptions.map(tag => (
-                    <button
-                      key={tag}
-                      type="button"
-                      className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 mr-1 mb-1 ${selectedTags.includes(tag) ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
-                      onClick={() => handleToggleTag(tag)}
-                    >
-                      {selectedTags.includes(tag) ? '✓ ' : ''}{tag}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-cyan-400 hover:border-cyan-400 mb-1"
-                    onClick={() => setShowAddTag(true)}
-                  >+
-                  </button>
-                  {showAddTag && (
-                    <input
-                      type="text"
-                      className="border rounded px-2 py-1 bg-[#232b36] text-gray-100 ml-2"
-                      placeholder="新标签"
-                      value={newTag}
-                      onChange={e => setNewTag(e.target.value)}
-                      onBlur={handleAddTag}
-                      onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); }}
-                      autoFocus
-                      style={{ width: 80 }}
-                    />
-                  )}
-                </div>
+                <TagSelector
+                  tagOptions={tagOptions}
+                  selectedTags={selectedTags}
+                  onToggleTag={handleToggleTag}
+                  showAddTag={showAddTag}
+                  setShowAddTag={setShowAddTag}
+                  newTag={newTag}
+                  setNewTag={setNewTag}
+                  onAddTag={handleAddTag}
+                />
                 {/* 有效期选择 */}
                 <span className="text-sm text-gray-300">有效期：</span>
                 {[
@@ -887,18 +616,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     {expire === opt.value ? '✓ ' : ''}{opt.label}
                   </button>
                 ))}
-                {/* 上传进度条 */}
-                {pending && files.length > 0 && (
-                  <div className="w-full mb-2">
-                    <div className="w-full h-3 bg-gray-700 rounded overflow-hidden animate-pulse">
-                      <div
-                        className="h-full bg-blue-500 transition-all duration-300"
-                        style={{ width: `${totalProgress}%` }}
-                      />
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1 text-center">{totalProgress}%（{totalProgress === 100 ? '全部完成' : '上传中...'}）</div>
-                  </div>
-                )}
                 {/* 批量上传按钮下方显示压缩提示 */}
                 {compressing && (
                   <div className="w-full text-center text-cyan-400 py-2">正在压缩大图片，请稍候...</div>
@@ -907,41 +624,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   <button
                     type="submit"
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
-                    disabled={pending || files.length === 0}
+                    disabled={files.length === 0}
                   >
-                    {pending ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                        批量上传中...
-                      </span>
-                    ) : '批量上传'}
+                    {files.length === 0 ? '请选择图片' : '批量上传'}
                   </button>
                 </div>
               </form>
               {/* 待上传图片预览区（移动到批量上传按钮下方） */}
-              {files.length > 0 && (
-                <div className="flex flex-wrap gap-4 mt-4">
-                  {files.map((file, idx) => {
-                    const key = file.name + '_' + file.size;
-                    const url = fileUrls.get(key);
-                    return url ? (
-                      <div key={key} style={{ width: 100, height: 100, position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#232b36', boxShadow: '0 2px 8px #232b3633' }}>
-                        <img src={url} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
-                        <span style={{ position: 'absolute', top: 2, right: 6, color: '#fff', background: '#0008', borderRadius: 8, padding: '0 4px', fontSize: 12 }}>{(file.size/1024).toFixed(1)}KB</span>
-                        <button
-                          type="button"
-                          aria-label="删除"
-                          style={{ position: 'absolute', top: 2, left: 2, background: '#f43f5e', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontWeight: 'bold', fontSize: 14, lineHeight: '20px', textAlign: 'center', padding: 0 }}
-                          onClick={e => {
-                            e.stopPropagation();
-                            setFiles(prev => prev.filter((_, i) => i !== idx));
-                          }}
-                        >×</button>
-                      </div>
-                    ) : null;
-                  })}
-                </div>
-              )}
+              <UploadPreview files={files} fileUrls={fileUrls} onDelete={idx => setFiles(prev => prev.filter((_, i) => i !== idx))} />
             </div>
           )}
           {tab==='gallery' && (
@@ -949,72 +639,26 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
               <div className="mt-8 sm:mt-12 mx-auto">
                 <h2 className="text-xl sm:text-2xl font-semibold mb-4">图库</h2>
                 {/* 文件夹筛选栏 */}
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-sm text-gray-300">文件夹：</span>
-                  <select
-                    className="bg-[#232b36] text-gray-100 border rounded px-2 py-1"
-                    value={selectedFolder}
-                    onChange={e => {
-                      setSelectedFolder(e.target.value);
-                      setPage(1);
-                      setHasMore(true);
-                      fetchGalleryOverview(e.target.value, 1);
-                    }}
-                  >
-                    {folderList.map(folder => (
-                      <option key={folder} value={folder}>{folder}</option>
-                    ))}
-                  </select>
-                  <button
-                    className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300 border ml-2"
-                    onClick={() => setShowAddFolder(v => !v)}
-                    type="button"
-                  >新建</button>
-                  {showAddFolder && (
-                    <input
-                      className="ml-2 border rounded px-2 py-1 bg-[#232b36] text-gray-100"
-                      placeholder="新文件夹名"
-                      value={newFolder}
-                      onChange={e => setNewFolder(e.target.value)}
-                      onBlur={() => setShowAddFolder(false)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && newFolder.trim()) {
-                          const name = newFolder.trim();
-                          if (!folderList.includes(name)) setFolderList(prev => [...prev, name]);
-                          setSelectedFolder(name);
-                          setNewFolder('');
-                          setShowAddFolder(false);
-                          setPage(1);
-                          setHasMore(true);
-                          fetchGalleryOverview(name, 1);
-                        }
-                      }}
-                      autoFocus
-                    />
-                  )}
-                  {/* 重命名/删除按钮 */}
-                  {selectedFolder !== '/' && (
-                    <>
-                      <button className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-yellow-600 text-yellow-300 border ml-2" onClick={() => { setShowRenameInput(true); setRenameFolder(selectedFolder); }} type="button">重命名</button>
-                      <button className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-red-600 text-red-300 border ml-2" onClick={() => handleDeleteFolder(selectedFolder)} type="button">删除</button>
-                    </>
-                  )}
-                  {showRenameInput && (
-                    <input
-                      className="ml-2 border rounded px-2 py-1 bg-[#232b36] text-gray-100"
-                      placeholder="新文件夹名"
-                      value={renameFolder}
-                      onChange={e => setRenameFolder(e.target.value)}
-                      onBlur={() => setShowRenameInput(false)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && renameFolder.trim()) {
-                          handleRenameFolder(selectedFolder, renameFolder.trim());
-                        }
-                      }}
-                      autoFocus
-                    />
-                  )}
-                </div>
+                <FolderSelector
+                  folderList={folderList}
+                  selectedFolder={selectedFolder}
+                  onFolderChange={folder => {
+                    setSelectedFolder(folder);
+                    setPage(1);
+                    setHasMore(true);
+                    fetchGalleryOverview(folder, 1);
+                  }}
+                  onRename={handleRenameFolder}
+                  onDelete={handleDeleteFolder}
+                  showAddFolder={showAddFolder}
+                  setShowAddFolder={setShowAddFolder}
+                  newFolder={newFolder}
+                  setNewFolder={setNewFolder}
+                  showRenameInput={showRenameInput}
+                  setShowRenameInput={setShowRenameInput}
+                  renameFolder={renameFolder}
+                  setRenameFolder={setRenameFolder}
+                />
                 {/* 筛选栏 */}
                 <div className="flex flex-wrap gap-2 mb-4">
                   {tagOptions.map(tag => (
@@ -1205,19 +849,19 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     <button
                       className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
                       onClick={async () => {
-                        setToast({ message: '正在去重...', type: 'info' });
+                        showToast({ message: '正在去重...', type: 'info' });
                         try {
                           const res = await fetch('/api/deduplicate', { method: 'POST', credentials: 'include' });
                           const data = await res.json();
                           if (data.status === 'success') {
-                            setToast({ message: `去重完成，删除了${data.deleted || 0}条重复图片`, type: 'success' });
+                            showToast({ message: `去重完成，删除了${data.deleted || 0}条重复图片`, type: 'success' });
                             // fetchHistory(search, tagFilter, filenameFilter); // 移除旧的 fetchHistory 调用
                             fetchGalleryOverview(selectedFolder, 1);
                           } else {
-                            setToast({ message: data.message || '去重失败', type: 'error' });
+                            showToast({ message: data.message || '去重失败', type: 'error' });
                           }
                         } catch (e) {
-                          setToast({ message: '去重失败，请重试', type: 'error' });
+                          showToast({ message: '去重失败，请重试', type: 'error' });
                         }
                       }}
                     >去重</button>
@@ -1228,67 +872,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
           )}
         </div>
         {/* 图片详情弹窗 */}
-        {modalOpen && modalItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={closeModal}>
-            <div className="bg-[#181f29] rounded-2xl shadow-2xl p-6 w-full max-w-md relative" onClick={e => e.stopPropagation()}>
-              <button className="absolute top-2 right-2 text-gray-400 hover:text-cyan-400 text-2xl" onClick={closeModal}>×</button>
-              <div style={{minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'}}>
-                {/* 加载动画，未加载完时显示 */}
-                {!imgInfo.width && !imgInfo.size && (
-                  <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 2}} className="w-full h-80 flex items-center justify-center bg-[#232b36] animate-pulse rounded">
-                    <span className="text-gray-400">图片加载中...</span>
-                  </div>
-                )}
-                {/* 加载失败时显示提示 */}
-                {imgInfo.size === -1 && (
-                  <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 3, background: '#232b36', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12}}>
-                    <span className="text-red-400">图片加载失败</span>
-                  </div>
-                )}
-                <img
-                  src={`/api/get_photo/${modalItem.file_id}`}
-                  alt="大图"
-                  loading="lazy"
-                  className="w-full rounded mb-4 bg-[#232b36]"
-                  style={{maxHeight: 320, objectFit: 'contain', opacity: imgInfo.width ? 1 : 0, transition: 'opacity 0.3s'}}
-                  onLoad={e => {
-                    const target = e.currentTarget as HTMLImageElement | null;
-                    if (target && target.naturalWidth && target.naturalHeight) {
-                      setImgInfo(prev => ({ ...prev, width: target.naturalWidth, height: target.naturalHeight }));
-                    }
-                  }}
-                  onError={e => {
-                    setImgInfo(prev => ({ ...prev, size: -1 }));
-                    e.currentTarget.src = 'https://via.placeholder.com/400x300?text=加载失败';
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="text-base font-bold text-gray-100 truncate">{modalItem.filename || modalItem.file_id}</div>
-                <div className="text-xs text-gray-400">上传时间：{new Date(modalItem.created_at).toLocaleString()}</div>
-                <div className="text-xs text-gray-400">标签：{modalItem.tags || '-'}</div>
-                <div className="text-xs text-gray-400">尺寸：{imgInfo.width} × {imgInfo.height}</div>
-                <div className="text-xs text-gray-400">大小：{imgInfo.size > 0 ? (imgInfo.size > 1024*1024 ? (imgInfo.size/1024/1024).toFixed(2)+' MB' : (imgInfo.size/1024).toFixed(1)+' KB') : '-'}</div>
-                {modalItem.short_code && (
-                  <>
-                    <div className="text-xs text-gray-400">直链：
-                      <a href={`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline break-all ml-1">{`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`}</a>
-                      <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`)}>复制</button>
-                    </div>
-                    <div className="text-xs text-gray-400">Markdown：
-                      <input className="border px-1 py-0.5 text-xs w-60 bg-[#232b36] text-gray-100 ml-1" value={`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`} readOnly />
-                      <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`)}>复制</button>
-                    </div>
-                    <div className="text-xs text-gray-400">HTML：
-                      <input className="border px-1 py-0.5 text-xs w-60 bg-[#232b36] text-gray-100 ml-1" value={`<img src=\"${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}\" />`} readOnly />
-                      <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`<img src=\"${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}\" />`)}>复制</button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <ImageModal open={modalOpen} img={modalItem} onClose={closeModal} onCopy={handleCopy} />
       </div>
     );
   }

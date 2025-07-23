@@ -55,7 +55,7 @@
 
 5. **首次部署后，手动初始化数据库表结构**
    - 打开 Cloudflare 控制台 → Workers & Pages → D1 → 你的数据库 → Console
-   - 执行以下 SQL 创建 images 表：
+   - 推荐直接复制本项目根目录下的 `schema.sql` 文件内容，粘贴到 Console 执行：
    ```sql
    CREATE TABLE IF NOT EXISTS images (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,10 +66,12 @@
      tags TEXT,
      filename TEXT,
      size INTEGER,
-     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-     hash TEXT
+     hash TEXT,
+     folder TEXT,
+     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
    );
    ```
+   - 或者直接上传 schema.sql 文件内容。
 
 6. **访问你的域名**
 

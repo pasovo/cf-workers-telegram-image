@@ -301,7 +301,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   };
 
   // 上传队列相关，确保并发上传时不会上传重复图片
-  const uploadingHashes = new Set<string>();
   const handleUploadAll = async () => {
     if (files.length === 0) return;
     setPending(true);

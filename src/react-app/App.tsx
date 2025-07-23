@@ -86,6 +86,36 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [renameFolder, setRenameFolder] = useState('');
   const [showRenameInput, setShowRenameInput] = useState(false);
 
+  // 预览图片用到的 URL 映射，避免重复 createObjectURL
+  const [fileUrls, setFileUrls] = useState<Map<string, string>>(new Map());
+
+  // 监听 files 队列变化，自动生成和释放 URL
+  useEffect(() => {
+    // 新增的 file 生成 URL
+    setFileUrls(prev => {
+      const next = new Map(prev);
+      files.forEach(file => {
+        const key = file.name + '_' + file.size;
+        if (!next.has(key)) {
+          next.set(key, URL.createObjectURL(file));
+        }
+      });
+      // 移除已删除的 file 的 URL
+      for (const key of next.keys()) {
+        if (!files.find(f => f.name + '_' + f.size === key)) {
+          URL.revokeObjectURL(next.get(key)!);
+          next.delete(key);
+        }
+      }
+      return next;
+    });
+    // 清理函数：组件卸载时释放所有 URL
+    return () => {
+      fileUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files]);
+
   // 页面标题和favicon同步
   useEffect(() => {
     document.title = pageTitle || '图床';
@@ -281,6 +311,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     let active = 0;
     let finished = 0;
     const total = files.length;
+    const localUploadingHashes = new Set<string>(); // 本轮上传专用
     const next = async () => {
       if (uploadQueueRef.current.length === 0) return;
       if (active >= maxConcurrentUploads) return;
@@ -289,14 +320,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       if (!file) return;
       // 计算 hash，确保同一张图片不会被多次上传
       const hash = await calcFileHash(file);
-      if (uploadingHashes.has(hash)) {
-        // 已经在上传队列中，跳过
+      if (localUploadingHashes.has(hash)) {
+        // 已经在本轮上传队列中，跳过
         finished++;
         setTotalProgress(Math.round((finished / total) * 100));
         next();
         return;
       }
-      uploadingHashes.add(hash);
+      localUploadingHashes.add(hash);
       active++;
       try {
         await uploadFile(file);
@@ -304,7 +335,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       } catch {
         setFailedIdx(prev => [...prev, idx]);
       }
-      uploadingHashes.delete(hash);
       active--;
       finished++;
       setTotalProgress(Math.round((finished / total) * 100));
@@ -318,6 +348,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     setFiles(prev => prev.filter((_, i) => failedIdx.includes(i)));
     setPending(false);
     setTotalProgress(0);
+    localUploadingHashes.clear(); // 上传完成后清空
   };
 
   // 复制短链/Markdown/HTML

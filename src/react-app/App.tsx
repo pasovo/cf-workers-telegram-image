@@ -703,7 +703,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         <div className={`fade-content${fade ? '' : ' fade-content-leave'}${enter ? ' fade-content-enter' : ''}${fade && !enter ? ' fade-content-enter-active' : ''}`} key={tab}>
           {tab==='upload' && (
             <div
-              className={`card card-hover mb-8 transition-all duration-200 ${dragActive ? 'ring-4 ring-cyan-400 shadow-2xl' : ''}`}
+              className={`card card-hover mb-8 transition-all duration-200 w-3/4 max-w-5xl mx-auto ${dragActive ? 'ring-4 ring-cyan-400 shadow-2xl' : ''}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
@@ -832,7 +832,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
             </div>
           )}
           {tab==='gallery' && (
-            <div className="card card-hover mb-8">
+            <div className="card card-hover mb-8 w-3/4 max-w-5xl mx-auto">
               <div className="mt-8 sm:mt-12 max-w-3xl mx-auto">
                 <h2 className="text-xl sm:text-2xl font-semibold mb-4">图库</h2>
                 {/* 筛选栏 */}
@@ -930,7 +930,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
             </div>
           )}
           {tab==='settings' && (
-            <div className="card card-hover mb-8 flex justify-center">
+            <div className="card card-hover mb-8 flex justify-center w-3/4 max-w-5xl mx-auto">
               <div className="max-w-md w-full p-6 mx-auto">
                 <h2 className="text-lg font-bold mb-4 text-cyan-400">系统设置</h2>
                 {settings ? (

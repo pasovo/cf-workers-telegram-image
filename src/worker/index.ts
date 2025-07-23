@@ -10,9 +10,8 @@ type Bindings = {
   ADMIN_USER: string;
   ADMIN_PASS: string;
   SHORTLINK_DOMAIN?: string;
+  JWT_SECRET: string;
 };
-
-const JWT_SECRET = 'your-secret-key'; // 建议用环境变量
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -39,12 +38,39 @@ function getBaseUrl(env: Bindings, req: any) {
   return env.SHORTLINK_DOMAIN || (host ? `${proto}://${host}` : '');
 }
 
-// 全局 CORS 支持
+// 全局 CORS 支持（修正为具体 origin 并允许带 cookie）
 app.use('*', async (c, next) => {
+  console.log('[CORS] 进入 CORS 中间件', c.req.path, c.req.url);
   await next();
-  c.header('Access-Control-Allow-Origin', '*');
+  const origin = c.req.header('origin');
+  if (origin) {
+    c.header('Access-Control-Allow-Origin', origin);
+  }
   c.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   c.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  c.header('Access-Control-Allow-Credentials', 'true');
+});
+
+// 鉴权中间件（Authorization: Bearer <token>）
+app.use('/api/*', async (c, next) => {
+  // 更健壮的排除登录/登出接口
+  if (/^\/api\/(login|logout)\/?$/.test(c.req.path)) return await next();
+  console.log('[AUTH] 进入鉴权中间件', c.req.path, c.req.url);
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('[AUTH] 未携带 Authorization 头或格式错误');
+    return c.json({ status: 'error', message: '未登录' }, { status: 401 });
+  }
+  const token = authHeader.slice(7);
+  try {
+    const payload = await verify(token, c.env.JWT_SECRET);
+    c.set('jwtPayload', payload);
+    console.log('[AUTH] token 校验通过', payload);
+    await next();
+  } catch (err) {
+    console.log('[AUTH] token 校验失败:', token, err);
+    return c.json({ status: 'error', message: '无效token' }, { status: 401 });
+  }
 });
 
 // 上传图片处理（支持有效期、短链、标签、文件名、统计、文件夹）
@@ -334,9 +360,11 @@ app.get('/api/stats', async (c) => {
 });
 // 设置API
 app.get('/api/settings', async (c) => {
+  console.log('[SETTINGS] 进入 settings 接口', c.req.path, c.req.url);
   // 鉴权
   const user = c.get('jwtPayload');
   if (!user) {
+    console.log('[SETTINGS] 未通过鉴权');
     return c.json({ status: 'error', message: '未登录' }, { status: 401 });
   }
   const DB = c.env.DB;
@@ -496,30 +524,13 @@ app.post('/api/login', async (c) => {
   if (username !== ADMIN_USER || password !== ADMIN_PASS) {
     return c.json({ status: 'error', message: '用户名或密码错误' }, { status: 401 });
   }
-  const token = await sign({ user: username, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 }, JWT_SECRET);
-  c.header('Set-Cookie', `token=${token}; HttpOnly; Path=/; SameSite=Strict;`);
-  return c.json({ status: 'success' });
+  const newToken = await sign({ user: username, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 }, c.env.JWT_SECRET);
+  // 返回 token 给前端
+  return c.json({ status: 'success', token: newToken });
 });
 
-// 鉴权中间件
-app.use('/api', async (c, next) => {
-  if (c.req.path === '/api/login' || c.req.path === '/api/logout' || c.req.path === '/api/settings') return await next();
-  const cookie = c.req.header('cookie') || '';
-  const match = cookie.match(/token=([^;]+)/);
-  const token = match ? match[1] : '';
-  if (!token) return c.json({ status: 'error', message: '未登录' }, { status: 401 });
-  try {
-    const payload = await verify(token, JWT_SECRET);
-    c.set('jwtPayload', payload);
-    await next();
-  } catch {
-    return c.json({ status: 'error', message: '无效token' }, { status: 401 });
-  }
-});
-
-// 登出接口
+// 登出接口（可选，前端只需清除本地 token 即可）
 app.post('/api/logout', async (c) => {
-  c.header('Set-Cookie', 'token=; Path=/; HttpOnly; Max-Age=0; SameSite=Strict;');
   return c.json({ status: 'success' });
 });
 

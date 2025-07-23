@@ -12,16 +12,20 @@ function App() {
   const [authChecked, setAuthChecked] = React.useState(false);
   const [isAuthed, setIsAuthed] = React.useState(false);
 
-  // 在 useEffect 检查登录状态时加 AbortController
+  // 页面加载时自动检查登录状态，带上 Authorization 头
   useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/settings', { credentials: 'include', signal: controller.signal })
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setIsAuthed(false);
+      setAuthChecked(true);
+      return;
+    }
+    fetch('/api/settings', { headers: { Authorization: 'Bearer ' + token } })
       .then(res => {
         if (res.status === 401) setIsAuthed(false);
         else setIsAuthed(true);
       })
       .finally(() => setAuthChecked(true));
-    return () => controller.abort();
   }, []);
 
   if (!authChecked) {
@@ -208,7 +212,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     try {
       const res = await fetch('/api/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + localStorage.getItem('token') },
         credentials: 'include',
         body: JSON.stringify({ ids: selected })
       });
@@ -243,7 +247,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const fetchStats = async () => {
     if (!isAuthed) return;
     try {
-      const res = await fetch('/api/stats', { credentials: 'include' });
+      const res = await fetch('/api/stats', { headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } });
       const data = await res.json();
       if (data.status === 'success') {
       }
@@ -253,15 +257,16 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
 
   // 获取设置
   const fetchSettings = async () => {
-    if (!isAuthed) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
     try {
-      const res = await fetch('/api/settings', { credentials: 'include' });
+      const res = await fetch('/api/settings', { headers: { Authorization: 'Bearer ' + token } });
       const data = await res.json();
       if (data.status === 'success') {
       }
     } catch {}
   };
-  React.useEffect(() => { if (isAuthed && tab === 'settings') fetchSettings(); }, [isAuthed, tab]);
+  React.useEffect(() => { if (tab === 'settings') fetchSettings(); }, [tab]);
 
   // 弹窗打开时获取图片尺寸和大小
   // 在弹窗图片加载 useEffect 里加 img.src = '' 清理
@@ -282,12 +287,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ username: loginUser, password: loginPass })
       });
       const data = await res.json();
-      if (res.ok && data.status === 'success') {
-        window.location.reload(); // 登录成功后强制刷新页面
+      if (res.ok && data.status === 'success' && data.token) {
+        localStorage.setItem('token', data.token);
+        setTimeout(() => {
+          window.location.reload(); // 登录成功后延迟刷新，确保 token 写入
+        }, 100);
       } else {
         setLoginError(data.message || '登录失败');
       }
@@ -299,10 +306,9 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
 
   // 登出方法
   const handleLogout = async () => {
-    await fetch('/api/logout', { method: 'POST', credentials: 'include' });
-    setIsAuthed(false);
-    showToast({ message: '已退出登录', type: 'info' });
-    window.location.reload(); // 强制刷新页面，确保 cookie 失效后重新鉴权
+    await fetch('/api/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } });
+    localStorage.removeItem('token');
+    window.location.reload(); // 直接刷新页面，避免中间错误状态
   };
 
   let content;
@@ -377,7 +383,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       try {
         const res = await fetch('/api/move', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + localStorage.getItem('token') },
           credentials: 'include',
           body: JSON.stringify({ ids: selected, folder: targetFolder })
         });
@@ -402,7 +408,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       try {
         const res = await fetch('/api/rename_folder', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + localStorage.getItem('token') },
           credentials: 'include',
           body: JSON.stringify({ oldName, newName })
         });
@@ -431,7 +437,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       try {
         const res = await fetch('/api/delete_folder', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + localStorage.getItem('token') },
           credentials: 'include',
           body: JSON.stringify({ folder })
         });
@@ -461,7 +467,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         if (search) params.append('search', search);
         if (tagFilter) params.append('tag', tagFilter);
         if (filenameFilter) params.append('filename', filenameFilter);
-        const res = await fetch(`/api/gallery_overview?${params.toString()}`, { credentials: 'include' });
+        const res = await fetch(`/api/gallery_overview?${params.toString()}`, { headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } });
         const data = await res.json();
         if (data.status === 'success') {
           setFolderList(data.folders);
@@ -851,7 +857,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                       onClick={async () => {
                         showToast({ message: '正在去重...', type: 'info' });
                         try {
-                          const res = await fetch('/api/deduplicate', { method: 'POST', credentials: 'include' });
+                          const res = await fetch('/api/deduplicate', { method: 'POST', headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } });
                           const data = await res.json();
                           if (data.status === 'success') {
                             showToast({ message: `去重完成，删除了${data.deleted || 0}条重复图片`, type: 'success' });

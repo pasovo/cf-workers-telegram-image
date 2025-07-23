@@ -76,17 +76,20 @@ app.post('/api/upload', async (c) => {
   let folder = (formData.get('folder') as string || '').trim();
   if (!folder) folder = '/';
   try {
+    const tgStart = Date.now();
     const response = await fetch(
       `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendPhoto`,
       { method: 'POST', body: formData }
     );
+    const tgApiTime = Date.now() - tgStart;
     if (!response.ok) {
       const errorDetails = await response.text();
       console.error('Telegram API错误:', errorDetails);
       return c.json({
         status: 'error',
         message: 'Telegram API调用失败',
-        details: errorDetails
+        details: errorDetails,
+        tg_api_time: tgApiTime
       }, { status: 500 });
     }
     const res: {
@@ -123,15 +126,16 @@ app.post('/api/upload', async (c) => {
         return c.json({
             status: 'error',
             message: '保存记录失败',
-            details: dbError instanceof Error ? dbError.message : String(dbError)
+            details: dbError instanceof Error ? dbError.message : String(dbError),
+            tg_api_time: tgApiTime
         }, { status: 500 });
       }
       // 返回短链
       const baseUrl = getBaseUrl(c.env, c.req);
       const shortUrl = baseUrl ? `${baseUrl}/img/${short_code}` : `/img/${short_code}`;
-      return c.json({ status: 'success', phonos: photo, short_code, short_url: shortUrl, expire_at });
+      return c.json({ status: 'success', phonos: photo, short_code, short_url: shortUrl, expire_at, tg_api_time: tgApiTime });
     } else {
-      return c.json({ status: 'error', message: res.description || '上传失败' });
+      return c.json({ status: 'error', message: res.description || '上传失败', tg_api_time: tgApiTime });
     }
   } catch (error: unknown) {
     console.error(error);

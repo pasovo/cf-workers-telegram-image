@@ -60,9 +60,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [dragActive, setDragActive] = useState(false);
   type TabType = 'upload' | 'gallery' | 'settings';
   const [tab, setTab] = useState<TabType>('upload');
-  const [lastTab, setLastTab] = useState<TabType>('upload');
-  const [fade, setFade] = useState(true);
-  const [enter, setEnter] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalItem, setModalItem] = useState<any>(null);
   const [imgInfo, setImgInfo] = useState<{ width: number; height: number; size: number }>({ width: 0, height: 0, size: 0 });
@@ -692,7 +689,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
           <div className="min-w-[120px]"></div>
         </nav>
         <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
-        <div className={`fade-content${fade ? '' : ' fade-content-leave'}${enter ? ' fade-content-enter' : ''}${fade && !enter ? ' fade-content-enter-active' : ''}`} key={tab}>
+        <div className={`fade-content`} key={tab}>
           {tab==='upload' && (
             <div
               className={`card card-hover mt-8 mb-8 transition-all duration-200 w-full sm:w-3/4 mx-auto ${dragActive ? 'ring-4 ring-cyan-400 shadow-2xl' : ''}`}

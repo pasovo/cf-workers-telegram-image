@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS images (
   tags TEXT,
   filename TEXT,
   size INTEGER,
-  visit_count INTEGER DEFAULT 0,
+  hash TEXT,
+  folder TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

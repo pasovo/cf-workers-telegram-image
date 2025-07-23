@@ -764,6 +764,21 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   ref={fileInputRef}
                 />
               </div>
+              {/* 待上传图片预览区 */}
+              {files.length > 0 && (
+                <div className="flex flex-wrap gap-4 mb-4">
+                  {files.map(file => {
+                    const key = file.name + '_' + file.size;
+                    const url = fileUrls.get(key);
+                    return url ? (
+                      <div key={key} style={{ width: 100, height: 100, position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#232b36', boxShadow: '0 2px 8px #232b3633' }}>
+                        <img src={url} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
+                        <span style={{ position: 'absolute', top: 2, right: 6, color: '#fff', background: '#0008', borderRadius: 8, padding: '0 4px', fontSize: 12 }}>{(file.size/1024).toFixed(1)}KB</span>
+                      </div>
+                    ) : null;
+                  })}
+                </div>
+              )}
               <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
                 {/* 文件夹选择栏，移动到这里 */}
                 <div className="flex items-center gap-2 mb-2">

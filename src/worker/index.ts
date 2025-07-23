@@ -40,7 +40,6 @@ function getBaseUrl(env: Bindings, req: any) {
 
 // 全局 CORS 支持（修正为具体 origin 并允许带 cookie）
 app.use('*', async (c, next) => {
-  console.log('[CORS] 进入 CORS 中间件', c.req.path, c.req.url);
   await next();
   const origin = c.req.header('origin');
   if (origin) {
@@ -55,20 +54,16 @@ app.use('*', async (c, next) => {
 app.use('/api/*', async (c, next) => {
   // 更健壮的排除登录/登出接口
   if (/^\/api\/(login|logout)\/?$/.test(c.req.path)) return await next();
-  console.log('[AUTH] 进入鉴权中间件', c.req.path, c.req.url);
   const authHeader = c.req.header('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.log('[AUTH] 未携带 Authorization 头或格式错误');
     return c.json({ status: 'error', message: '未登录' }, { status: 401 });
   }
   const token = authHeader.slice(7);
   try {
     const payload = await verify(token, c.env.JWT_SECRET);
     c.set('jwtPayload', payload);
-    console.log('[AUTH] token 校验通过', payload);
     await next();
   } catch (err) {
-    console.log('[AUTH] token 校验失败:', token, err);
     return c.json({ status: 'error', message: '无效token' }, { status: 401 });
   }
 });
@@ -127,7 +122,6 @@ app.post('/api/upload', async (c) => {
   let folder = (formData.get('folder') as string || '').trim();
   if (!folder) folder = '/';
   if (folder) folder = sanitizeFilename(folder);
-  console.log(`[UPLOAD] user=${c.get('jwtPayload')?.user || '-'} filename=${filename} size=${photoFile.size} time=${Date.now()}`);
   try {
     const tgStart = Date.now();
     const response = await fetch(
@@ -253,7 +247,6 @@ app.post('/api/delete', async (c) => {
   if (!Array.isArray(ids) || ids.length === 0) {
     return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
   }
-  console.log(`[DELETE] user=${c.get('jwtPayload')?.user || '-'} ids=${ids.join(',')} time=${Date.now()}`);
   try {
     // 用 batch 批量执行所有删除 SQL
     const stmts = ids.map(id => DB.prepare('DELETE FROM images WHERE file_id = ?').bind(id));
@@ -360,11 +353,9 @@ app.get('/api/stats', async (c) => {
 });
 // 设置API
 app.get('/api/settings', async (c) => {
-  console.log('[SETTINGS] 进入 settings 接口', c.req.path, c.req.url);
   // 鉴权
   const user = c.get('jwtPayload');
   if (!user) {
-    console.log('[SETTINGS] 未通过鉴权');
     return c.json({ status: 'error', message: '未登录' }, { status: 401 });
   }
   const DB = c.env.DB;

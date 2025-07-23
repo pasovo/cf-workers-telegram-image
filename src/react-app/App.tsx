@@ -62,7 +62,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [dragActive, setDragActive] = useState(false);
   type TabType = 'upload' | 'gallery' | 'settings';
   const [tab, setTab] = useState<TabType>('upload');
-  const [lastTab, setLastTab] = useState<TabType>(tab);
+  const [lastTab, setLastTab] = useState<TabType>('upload'); // 不依赖 tab 作为初始值，避免 hooks 顺序变化
   const [fade, setFade] = useState(true);
   const [enter, setEnter] = useState(false);
   // 弹窗相关
@@ -78,7 +78,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   // 页面标题和网站图标
   const [pageTitle, setPageTitle] = useState<string>(() => localStorage.getItem('pageTitle') || '图床');
   const [faviconUrl, setFaviconUrl] = useState<string>(() => localStorage.getItem('faviconUrl') || '/favicon.ico');
-  const [titleInput, setTitleInput] = useState(pageTitle);
+  const [titleInput, setTitleInput] = useState(() => localStorage.getItem('pageTitle') || '图床'); // 避免依赖 pageTitle
   const [faviconFile, setFaviconFile] = useState<File|null>(null);
   // 分页相关
   const [page, setPage] = useState(1);

@@ -215,7 +215,8 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     });
   };
 
-  const uploadFile = async (file: File) => {
+  // 上传单个文件，增加重试机制
+  const uploadFile = async (file: File, maxRetries = 3) => {
     let uploadFile = file;
     if (file.size > 10 * 1024 * 1024) {
       uploadFile = await compressImage(file);
@@ -233,32 +234,44 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     formData.append('filename', uploadFile.name);
     formData.append('hash', hash);
     formData.append('folder', selectedFolder || '/');
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/upload');
-      xhr.onload = () => {
-        try {
-          const res = JSON.parse(xhr.responseText);
-          if (xhr.status === 200 && res.status === 'success') {
-            setToast({ message: '图片上传成功', type: 'success' });
-            resolve();
-          } else {
-            setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
-            reject(new Error(res.message || '上传失败'));
-          }
-        } catch (err) {
-          setToast({ message: '上传失败，服务器响应异常', type: 'error' });
-          reject(err);
-        }
-      };
-      xhr.onerror = () => {
-        setToast({ message: '上传失败，请重试', type: 'error' });
-        reject(new Error('上传失败'));
-      };
-      xhr.send(formData);
-    });
+    let attempt = 0;
+    while (attempt < maxRetries) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/upload');
+          xhr.onload = () => {
+            try {
+              const res = JSON.parse(xhr.responseText);
+              if (xhr.status === 200 && res.status === 'success') {
+                setToast({ message: '图片上传成功', type: 'success' });
+                resolve();
+              } else {
+                setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
+                reject(new Error(res.message || '上传失败'));
+              }
+            } catch (err) {
+              setToast({ message: '上传失败，服务器响应异常', type: 'error' });
+              reject(err);
+            }
+          };
+          xhr.onerror = () => {
+            setToast({ message: '上传失败，请重试', type: 'error' });
+            reject(new Error('上传失败'));
+          };
+          xhr.send(formData);
+        });
+        return; // 成功则直接返回
+      } catch (err) {
+        attempt++;
+        if (attempt >= maxRetries) throw err;
+        await new Promise(r => setTimeout(r, 500 * attempt)); // 递增延迟重试
+      }
+    }
   };
 
+  // 上传队列相关，确保并发上传时不会上传重复图片
+  const uploadingHashes = new Set<string>();
   const handleUploadAll = async () => {
     if (files.length === 0) return;
     setPending(true);
@@ -274,6 +287,16 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const idx = files.length - uploadQueueRef.current.length;
       const file = uploadQueueRef.current.shift();
       if (!file) return;
+      // 计算 hash，确保同一张图片不会被多次上传
+      const hash = await calcFileHash(file);
+      if (uploadingHashes.has(hash)) {
+        // 已经在上传队列中，跳过
+        finished++;
+        setTotalProgress(Math.round((finished / total) * 100));
+        next();
+        return;
+      }
+      uploadingHashes.add(hash);
       active++;
       try {
         await uploadFile(file);
@@ -281,6 +304,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       } catch {
         setFailedIdx(prev => [...prev, idx]);
       }
+      uploadingHashes.delete(hash);
       active--;
       finished++;
       setTotalProgress(Math.round((finished / total) * 100));

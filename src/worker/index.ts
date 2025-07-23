@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
-import { v4 as uuidv4 } from 'uuid';
 import md5 from 'md5';
 import { sign, verify } from 'hono/jwt';
 

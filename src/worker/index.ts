@@ -48,8 +48,11 @@ app.post('/api/upload', async (c) => {
       }, { status: 500 });
   }
   const formData = await c.req.formData();
+  if (!formData || typeof formData.get !== 'function') {
+    return c.json({ status: 'error', message: '表单数据解析失败' }, { status: 400 });
+  }
   const photoFile = formData.get('photo') as File;
-  if (!photoFile || photoFile.size === 0) {
+  if (!photoFile || (photoFile as any).size === 0) {
       return c.json({
           status: 'error',
           message: '请上传有效的图片文件'

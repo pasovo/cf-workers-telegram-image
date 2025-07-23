@@ -62,6 +62,14 @@ app.post('/api/upload', async (c) => {
   const arrayBuffer = await photoFile.arrayBuffer();
   const hash = md5(new Uint8Array(arrayBuffer));
   formData.append('chat_id', TG_CHAT_ID);
+  // 统计本次请求的总大小
+  let requestSize = 0;
+  if (c.req.header('content-length')) {
+    requestSize = parseInt(c.req.header('content-length') || '0', 10);
+  } else {
+    // 兼容部分环境，尝试估算
+    requestSize = arrayBuffer.byteLength;
+  }
   // 有效期参数
   const expireOption = formData.get('expire') as string || 'forever';
   let expire_at: string | null = null;
@@ -89,7 +97,8 @@ app.post('/api/upload', async (c) => {
         status: 'error',
         message: 'Telegram API调用失败',
         details: errorDetails,
-        tg_api_time: tgApiTime
+        tg_api_time: tgApiTime,
+        request_size: requestSize
       }, { status: 500 });
     }
     const res: {
@@ -127,15 +136,16 @@ app.post('/api/upload', async (c) => {
             status: 'error',
             message: '保存记录失败',
             details: dbError instanceof Error ? dbError.message : String(dbError),
-            tg_api_time: tgApiTime
+            tg_api_time: tgApiTime,
+            request_size: requestSize
         }, { status: 500 });
       }
       // 返回短链
       const baseUrl = getBaseUrl(c.env, c.req);
       const shortUrl = baseUrl ? `${baseUrl}/img/${short_code}` : `/img/${short_code}`;
-      return c.json({ status: 'success', phonos: photo, short_code, short_url: shortUrl, expire_at, tg_api_time: tgApiTime });
+      return c.json({ status: 'success', phonos: photo, short_code, short_url: shortUrl, expire_at, tg_api_time: tgApiTime, request_size: requestSize });
     } else {
-      return c.json({ status: 'error', message: res.description || '上传失败', tg_api_time: tgApiTime });
+      return c.json({ status: 'error', message: res.description || '上传失败', tg_api_time: tgApiTime, request_size: requestSize });
     }
   } catch (error: unknown) {
     console.error(error);

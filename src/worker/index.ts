@@ -37,7 +37,7 @@ function getBaseUrl(env: any, req: any) {
   return env.SHORTLINK_DOMAIN || (host ? `${proto}://${host}` : '');
 }
 
-// 上传图片处理（支持有效期、短链、标签、文件名、统计）
+// 上传图片处理（支持有效期、短链、标签、文件名、统计、文件夹）
 app.post('/api/upload', async (c) => {
   const { TG_BOT_TOKEN, TG_CHAT_ID, DB } = c.env;
   if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
@@ -70,6 +70,9 @@ app.post('/api/upload', async (c) => {
   let filename = (formData.get('filename') as string || '').trim();
   if (filename) filename = sanitizeFilename(filename);
   // forever/null 表示永久
+  // 文件夹参数
+  let folder = (formData.get('folder') as string || '').trim();
+  if (!folder) folder = '/';
   try {
     const response = await fetch(
       `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendPhoto`,
@@ -106,9 +109,9 @@ app.post('/api/upload', async (c) => {
       try {
         const size = photoFile.size;
         const stmt = DB.prepare(
-          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename, size, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)' 
+          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename, size, hash, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)' 
         );
-        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size, hash).run();
+        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size, hash, folder).run();
         if (!dbResult.success) {
             throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
         }
@@ -219,10 +222,10 @@ app.get('/img/:short_code', async (c) => {
   }
 });
 
-// 新增：获取历史记录API
+// 新增：获取历史记录API，支持 folder 查询
 app.get('/api/history', async (c) => {
   try {
-    const { page = '1', limit = '20', search = '', tag = '', filename = '' } = c.req.query();
+    const { page = '1', limit = '20', search = '', tag = '', filename = '', folder = '' } = c.req.query();
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 20;
     const offset = (pageNum - 1) * limitNum;
@@ -239,6 +242,10 @@ app.get('/api/history', async (c) => {
     if (filename) {
       sql += ' AND filename LIKE ?';
       params.push(`%${filename}%`);
+    }
+    if (folder) {
+      sql += ' AND folder = ?';
+      params.push(folder);
     }
     sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(limitNum, offset);
@@ -333,6 +340,105 @@ app.post('/api/deduplicate', async (c) => {
   }
   return c.json({ status: 'success', deleted, duplicates });
 });
+
+// 新增：获取所有文件夹列表
+app.get('/api/folders', async (c) => {
+  const { DB } = c.env;
+  const { results } = await DB.prepare('SELECT DISTINCT folder FROM images').all();
+  const folders = results.map((row: any) => row.folder).filter((f: string) => f && f.trim() !== '');
+  return c.json({ status: 'success', folders });
+});
+// 新增：批量移动图片到文件夹
+app.post('/api/move', async (c) => {
+  const { DB } = c.env;
+  const { ids, folder } = await c.req.json(); // ids: file_id[]
+  if (!Array.isArray(ids) || typeof folder !== 'string') {
+    return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
+  }
+  try {
+    for (const id of ids) {
+      await DB.prepare('UPDATE images SET folder = ? WHERE file_id = ?').bind(folder, id).run();
+    }
+    return c.json({ status: 'success' });
+  } catch (error) {
+    return c.json({ status: 'error', message: error instanceof Error ? error.message : String(error) }, { status: 500 });
+  }
+});
+
+// 新增：重命名文件夹
+app.post('/api/rename_folder', async (c) => {
+  const { DB } = c.env;
+  const { oldName, newName } = await c.req.json();
+  if (typeof oldName !== 'string' || typeof newName !== 'string' || !oldName.trim() || !newName.trim()) {
+    return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
+  }
+  try {
+    await DB.prepare('UPDATE images SET folder = ? WHERE folder = ?').bind(newName, oldName).run();
+    return c.json({ status: 'success' });
+  } catch (error) {
+    return c.json({ status: 'error', message: error instanceof Error ? error.message : String(error) }, { status: 500 });
+  }
+});
+// 新增：删除文件夹及其所有图片
+app.post('/api/delete_folder', async (c) => {
+  const { DB } = c.env;
+  const { folder } = await c.req.json();
+  if (typeof folder !== 'string' || !folder.trim()) {
+    return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
+  }
+  try {
+    await DB.prepare('DELETE FROM images WHERE folder = ?').bind(folder).run();
+    return c.json({ status: 'success' });
+  } catch (error) {
+    return c.json({ status: 'error', message: error instanceof Error ? error.message : String(error) }, { status: 500 });
+  }
+});
+
+// 新增：一次性获取文件夹列表和图片列表
+app.get('/api/gallery_overview', async (c) => {
+  const { DB } = c.env;
+  const { folder = '/', page = '1', limit = '20', search = '', tag = '', filename = '' } = c.req.query();
+  // 文件夹列表
+  const folderRes = await DB.prepare('SELECT DISTINCT folder FROM images').all();
+  const folders = folderRes.results.map((row: any) => row.folder).filter((f: string) => f && f.trim() !== '');
+  // 图片列表
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 20;
+  const offset = (pageNum - 1) * limitNum;
+  let sql = 'SELECT * FROM images WHERE 1=1';
+  const params: any[] = [];
+  if (search) {
+    sql += ' AND (file_id LIKE ? OR chat_id LIKE ?)';
+    params.push(`%${search}%`, `%${search}%`);
+  }
+  if (tag) {
+    sql += ' AND tags LIKE ?';
+    params.push(`%${tag}%`);
+  }
+  if (filename) {
+    sql += ' AND filename LIKE ?';
+    params.push(`%${filename}%`);
+  }
+  if (folder) {
+    sql += ' AND folder = ?';
+    params.push(folder);
+  }
+  sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+  params.push(limitNum, offset);
+  const { results } = await DB.prepare(sql).bind(...params).all();
+  return c.json({
+    status: 'success',
+    folders: ['/', ...folders.filter((f: string) => f !== '/')],
+    images: results,
+    pagination: { page: pageNum, limit: limitNum, total: results.length }
+  });
+});
+
+// 上传、重命名、删除、移动等API操作成功后也返回最新folders和images
+// 上传接口内，成功后：
+// const overview = await getGalleryOverview(DB, folder, 1, 20);
+// return c.json({ status: 'success', ...overview, ...其它返回项 });
+// ...同理用于其它相关API...
 
 let globalAuthToken: string | null = null;
 

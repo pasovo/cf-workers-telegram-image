@@ -51,7 +51,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [pending, setPending] = useState(false);
   const [history, setHistory] = useState<Array<{ id: number; file_id: string; created_at: string; short_code?: string; tags?: string; filename?: string }>>([]);
   const [search] = useState('');
-  const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' }>({ message: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expire, setExpire] = useState('forever');
@@ -60,14 +59,12 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [tagFilter, setTagFilter] = useState('');
   const [filenameFilter] = useState('');
   const [files, setFiles] = useState<File[]>([]); // 待上传文件队列
-  const [stats, setStats] = useState<{ total: number; size: number; hot: any[] }>({ total: 0, size: 0, hot: [] });
   const [dragActive, setDragActive] = useState(false);
   type TabType = 'upload' | 'gallery' | 'settings';
   const [tab, setTab] = useState<TabType>('upload');
   const [lastTab, setLastTab] = useState<TabType>(tab);
   const [fade, setFade] = useState(true);
   const [enter, setEnter] = useState(false);
-  const [settings, setSettings] = useState<any>(null);
   // 弹窗相关
   const [modalOpen, setModalOpen] = useState(false);
   const [modalItem, setModalItem] = useState<any>(null);
@@ -86,12 +83,10 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   // 分页相关
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const LIMIT = 20;
   // 上传队列相关
   const [maxConcurrentUploads, setMaxConcurrentUploads] = useState(() => Number(localStorage.getItem('maxConcurrentUploads')) || 3);
   const uploadQueueRef = useRef<File[]>([]);
-  const [uploadingIdx, setUploadingIdx] = useState<number[]>([]);
   const [failedIdx, setFailedIdx] = useState<number[]>([]);
   const [totalProgress, setTotalProgress] = useState(0);
   // 文件夹相关
@@ -127,73 +122,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       link.href = faviconUrl;
     }
   }, [pageTitle, faviconUrl]);
-
-  // 1. 新增分页相关状态
-  // const [page, setPage] = useState(1);
-  // const [hasMore, setHasMore] = useState(true);
-  // const [isLoadingMore, setIsLoadingMore] = useState(false);
-  // const LIMIT = 20;
-
-  // 2. fetchHistory支持分页，支持追加
-  const fetchHistory = async (searchVal = '', tagVal = '', filenameVal = '', pageNum = 1, append = false) => {
-    if (!isAuthed) return;
-    if (isLoadingMore) return;
-    if (!append) setLoading(true);
-    setIsLoadingMore(true);
-    try {
-      const params = new URLSearchParams();
-      if (searchVal) params.append('search', searchVal);
-      if (tagVal) params.append('tag', tagVal);
-      if (filenameVal) params.append('filename', filenameVal);
-      params.append('page', String(pageNum));
-      params.append('limit', String(LIMIT));
-      const response = await fetch(`/api/history?${params.toString()}`, { credentials: 'include' });
-      if (!response.ok) throw new Error('获取历史记录失败');
-      const data = await response.json();
-      if (data.status === 'success') {
-        if (append) {
-          setHistory(prev => [...prev, ...data.data]);
-        } else {
-          setHistory(data.data);
-        }
-        // 提取所有图片的标签
-        const allTags = data.data
-          .map((item: any) => (item.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean))
-          .flat();
-        const uniqueTags = Array.from(new Set(allTags)) as string[];
-        setTagOptions(uniqueTags.length > 0 ? uniqueTags : ['默认']);
-        // 判断是否还有更多
-        setHasMore(data.data.length >= LIMIT);
-      } else {
-        setToast({ message: data.message || '加载历史记录失败', type: 'error' });
-      }
-    } catch (error) {
-      if (error instanceof Error && !/no such table|not found|not exist|not found/i.test(error.message)) {
-        setToast({ message: '加载历史记录失败，请刷新页面重试', type: 'error' });
-      }
-    } finally {
-      setLoading(false);
-      setIsLoadingMore(false);
-    }
-  };
-
-  // 3. useEffect依赖变化时重置分页
-  useEffect(() => {
-    if (!isAuthed) return;
-    setPage(1);
-    setHasMore(true);
-    fetchHistory(search, tagFilter, filenameFilter, 1, false);
-    // eslint-disable-next-line
-  }, [isAuthed, search, tagFilter, filenameFilter]);
-
-  // 4. Masonry滚动到底部时加载更多
-  // const handleMasonryEndReached = () => {
-  //   if (hasMore && !isLoadingMore) {
-  //     const nextPage = page + 1;
-  //     setPage(nextPage);
-  //     fetchHistory(search, tagFilter, filenameFilter, nextPage, true);
-  //   }
-  // };
 
   // 处理文件添加（多选、拖拽、粘贴）
   // 修改 handleAddFiles，自动去重
@@ -310,17 +238,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     });
   };
 
-  // 上传队列处理
-  // 1. 设置页支持自定义最大并发上传数
-  // const [maxConcurrentUploads, setMaxConcurrentUploads] = useState(() => Number(localStorage.getItem('maxConcurrentUploads')) || 3);
-  // 2. 上传队列多线程上传实现
-  // const uploadQueueRef = useRef<File[]>([]);
-  // const [uploadingIdx, setUploadingIdx] = useState<number[]>([]); // 正在上传的索引
-  // const [failedIdx, setFailedIdx] = useState<number[]>([]); // 上传失败的索引
-  // const [totalProgress, setTotalProgress] = useState(0);
-
-  // 单文件上传逻辑，供多线程上传队列调用
-  // 修改 uploadFile，上传时带 hash 字段
   const uploadFile = async (file: File) => {
     let uploadFile = file;
     if (file.size > 10 * 1024 * 1024) {
@@ -347,7 +264,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
           const res = JSON.parse(xhr.responseText);
           if (xhr.status === 200 && res.status === 'success') {
             setToast({ message: '图片上传成功', type: 'success' });
-            fetchStats(); // 上传后刷新统计
             resolve();
           } else {
             setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
@@ -370,7 +286,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     if (files.length === 0) return;
     setPending(true);
     uploadQueueRef.current = files.slice();
-    setUploadingIdx([]);
     setFailedIdx([]);
     setTotalProgress(0);
     let active = 0;
@@ -382,14 +297,11 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const idx = files.length - uploadQueueRef.current.length;
       const file = uploadQueueRef.current.shift();
       if (!file) return;
-      setUploadingIdx(prev => [...prev, idx]);
       active++;
       try {
         await uploadFile(file);
-        setUploadingIdx(prev => prev.filter(i => i !== idx));
-        fetchHistory(search, tagFilter, filenameFilter);
+        setFailedIdx(prev => prev.filter(i => i !== idx));
       } catch {
-        setUploadingIdx(prev => prev.filter(i => i !== idx));
         setFailedIdx(prev => [...prev, idx]);
       }
       active--;
@@ -443,7 +355,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const data = await res.json();
       if (data.status === 'success') {
         setToast({ message: '删除成功', type: 'success' });
-        fetchStats(); // 删除后刷新统计
+        setSelected([]);
       } else {
         // 回滚
         setHistory(prev => [...removed, ...prev]);
@@ -467,18 +379,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     URL.revokeObjectURL(url);
   };
 
-  // 删除待上传图片
-  const handleRemoveFile = (idx: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== idx));
-  };
-
   // 获取统计
   const fetchStats = async () => {
     if (!isAuthed) return;
     try {
       const res = await fetch('/api/stats', { credentials: 'include' });
       const data = await res.json();
-      if (data.status === 'success') setStats(data);
+      if (data.status === 'success') {
+      }
     } catch (err) {}
   };
   React.useEffect(() => { if (isAuthed) fetchStats(); }, [isAuthed]);
@@ -489,7 +397,8 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     try {
       const res = await fetch('/api/settings', { credentials: 'include' });
       const data = await res.json();
-      if (data.status === 'success') setSettings(data);
+      if (data.status === 'success') {
+      }
     } catch {}
   };
   React.useEffect(() => { if (isAuthed && tab === 'settings') fetchSettings(); }, [isAuthed, tab]);
@@ -660,7 +569,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   };
 
   // Masonry items准备
-  const displayItems = loading && history.length === 0
+  const displayItems = history.length === 0
     ? Array.from({ length: 20 }, (_, i) => ({ skeleton: true, id: 'skeleton-' + i }))
     : history;
 
@@ -677,7 +586,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const data = await res.json();
       if (data.status === 'success') {
         setToast({ message: '移动成功', type: 'success' });
-        fetchHistory(search, tagFilter, filenameFilter, page, false);
+        // fetchHistory(search, tagFilter, filenameFilter, page, false); // 移除旧的 fetchHistory 调用
         setSelected([]);
       } else {
         setToast({ message: data.message || '移动失败', type: 'error' });
@@ -688,8 +597,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   };
 
   // 在AppContent顶部添加重命名/删除相关状态
-  // const [renameFolder, setRenameFolder] = useState('');
-  // const [showRenameInput, setShowRenameInput] = useState(false);
 
   // 重命名文件夹
   const handleRenameFolder = async (oldName: string, newName: string) => {
@@ -704,12 +611,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const data = await res.json();
       if (data.status === 'success') {
         setToast({ message: '重命名成功', type: 'success' });
-        fetchFolders();
+        // fetchFolders(); // 移除旧的 fetchFolders 调用
         if (selectedFolder === oldName) setSelectedFolder(newName);
         setShowRenameInput(false);
         setRenameFolder('');
         // 刷新图库
-        if (tab === 'gallery') fetchHistory(search, tagFilter, filenameFilter, 1, false);
+        if (tab === 'gallery') {
+          fetchGalleryOverview(selectedFolder, 1);
+        }
       } else {
         setToast({ message: data.message || '重命名失败', type: 'error' });
       }
@@ -731,10 +640,12 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const data = await res.json();
       if (data.status === 'success') {
         setToast({ message: '删除成功', type: 'success' });
-        fetchFolders();
+        // fetchFolders(); // 移除旧的 fetchFolders 调用
         setSelectedFolder('/');
         // 刷新图库
-        if (tab === 'gallery') fetchHistory(search, tagFilter, filenameFilter, 1, false);
+        if (tab === 'gallery') {
+          fetchGalleryOverview(selectedFolder, 1);
+        }
       } else {
         setToast({ message: data.message || '删除失败', type: 'error' });
       }
@@ -743,21 +654,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     }
   };
 
-  // 确保在AppContent顶部唯一声明：
-  // const [folderList, setFolderList] = useState<string[]>(['/']);
-  // const [selectedFolder, setSelectedFolder] = useState<string>('/');
-  // const [newFolder, setNewFolder] = useState('');
-  // const [showAddFolder, setShowAddFolder] = useState(false);
-  const fetchFolders = async () => {
-    try {
-      const res = await fetch('/api/folders', { credentials: 'include' });
-      const data = await res.json();
-      if (data.status === 'success') {
-        setFolderList(['/', ...data.folders.filter((f: string) => f !== '/')]);
-      }
-    } catch {}
-  };
-  // 新增统一的 fetchGalleryOverview 方法
   const fetchGalleryOverview = async (folder = selectedFolder, page = 1) => {
     try {
       const params = new URLSearchParams();
@@ -814,81 +710,15 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         </div>
         <div className="min-w-[120px]"></div>
       </nav>
-      {/* Banner区块已移除 */}
-      {/* 查找并移除 container、max-w-4xl、px-2、sm:px-4、py-8 等外层包裹 */}
-      {/* 只保留 w-full min-h-screen 作为最外层，内容卡片直接渲染在其下 */}
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
-      {/* 统计区块，仅在上传/图库页显示 */}
-      {/* 删除上传/图库页统计区块 */}
-      {/* 其余Tab内容卡片化 */}
       <div className={`fade-content${fade ? '' : ' fade-content-leave'}${enter ? ' fade-content-enter' : ''}${fade && !enter ? ' fade-content-enter-active' : ''}`} key={tab}>
         {tab==='upload' && (
           <div
             className={`card card-hover mt-8 mb-8 transition-all duration-200 w-full sm:w-3/4 mx-auto ${dragActive ? 'ring-4 ring-cyan-400 shadow-2xl' : ''}`}
-            // 拖拽事件直接加在卡片上
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            {/* 文件夹选择栏 */}
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm text-gray-300">文件夹：</span>
-              <select
-                className="bg-[#232b36] text-gray-100 border rounded px-2 py-1"
-                value={selectedFolder}
-                onChange={e => setSelectedFolder(e.target.value)}
-              >
-                {folderList.map(folder => (
-                  <option key={folder} value={folder}>{folder}</option>
-                ))}
-              </select>
-              <button
-                className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300 border ml-2"
-                onClick={() => setShowAddFolder(v => !v)}
-                type="button"
-              >新建</button>
-              {showAddFolder && (
-                <input
-                  className="ml-2 border rounded px-2 py-1 bg-[#232b36] text-gray-100"
-                  placeholder="新文件夹名"
-                  value={newFolder}
-                  onChange={e => setNewFolder(e.target.value)}
-                  onBlur={() => setShowAddFolder(false)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && newFolder.trim()) {
-                      const name = newFolder.trim();
-                      if (!folderList.includes(name)) setFolderList(prev => [...prev, name]);
-                      setSelectedFolder(name);
-                      setNewFolder('');
-                      setShowAddFolder(false);
-                    }
-                  }}
-                  autoFocus
-                />
-              )}
-              {/* 重命名/删除按钮 */}
-              {selectedFolder !== '/' && (
-                <>
-                  <button className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-yellow-600 text-yellow-300 border ml-2" onClick={() => { setShowRenameInput(true); setRenameFolder(selectedFolder); }} type="button">重命名</button>
-                  <button className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-red-600 text-red-300 border ml-2" onClick={() => handleDeleteFolder(selectedFolder)} type="button">删除</button>
-                </>
-              )}
-              {showRenameInput && (
-                <input
-                  className="ml-2 border rounded px-2 py-1 bg-[#232b36] text-gray-100"
-                  placeholder="新文件夹名"
-                  value={renameFolder}
-                  onChange={e => setRenameFolder(e.target.value)}
-                  onBlur={() => setShowRenameInput(false)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && renameFolder.trim()) {
-                      handleRenameFolder(selectedFolder, renameFolder.trim());
-                    }
-                  }}
-                  autoFocus
-                />
-              )}
-            </div>
             {/* 拖拽+点击上传区域 */}
             <div
               className={`w-full aspect-[4/1] flex flex-col items-center justify-center mb-4 border-2 border-dashed rounded-xl transition-colors duration-200 ${dragActive ? 'border-cyan-400 bg-[#1a2230]' : 'border-gray-500 bg-[#232b36]/60'}`}
@@ -908,28 +738,70 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
               />
             </div>
             <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
-              {/* 拖拽/粘贴/多选上传区域 */}
-              <div className="space-y-2 flex flex-col items-center">
-                {files.length > 0 && (
-                  <div className="w-full flex flex-wrap gap-2 mt-2">
-                    {files.slice(0, 30).map((file, idx) => (
-                      <div key={idx} className={`relative flex flex-col items-center border rounded p-2 bg-[#232b36] ${selected.includes(file.name) ? 'ring-2 ring-cyan-400 border-cyan-400' : ''}`}>
-                        <button
-                          className="absolute -top-2 -right-2 w-6 h-6 bg-[#232b36] text-gray-400 hover:text-red-400 rounded-full flex items-center justify-center shadow"
-                          type="button"
-                          title="移除"
-                          onClick={() => handleRemoveFile(idx)}
-                        >×</button>
-                        <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" onClick={() => setSelected([...selected, file.name])} />
-                        <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
-                        {uploadingIdx.includes(idx) && <span className="text-xs text-blue-400 mt-1">上传中...</span>}
-                        {failedIdx.includes(idx) && <span className="text-xs text-red-400 mt-1">失败</span>}
-                      </div>
-                    ))}
-                    {files.length > 30 && (
-                      <div className="flex items-center justify-center w-16 h-16 bg-[#232b36] rounded text-cyan-400 text-lg font-bold">+{files.length - 30}</div>
-                    )}
-                  </div>
+              {/* 文件夹选择栏，移动到这里 */}
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm text-gray-300">文件夹：</span>
+                <select
+                  className="bg-[#232b36] text-gray-100 border rounded px-2 py-1"
+                  value={selectedFolder}
+                  onChange={e => {
+                    setSelectedFolder(e.target.value);
+                    setPage(1);
+                    setHasMore(true);
+                    fetchGalleryOverview(e.target.value, 1);
+                  }}
+                >
+                  {folderList.map(folder => (
+                    <option key={folder} value={folder}>{folder}</option>
+                  ))}
+                </select>
+                <button
+                  className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300 border ml-2"
+                  onClick={() => setShowAddFolder(v => !v)}
+                  type="button"
+                >新建</button>
+                {showAddFolder && (
+                  <input
+                    className="ml-2 border rounded px-2 py-1 bg-[#232b36] text-gray-100"
+                    placeholder="新文件夹名"
+                    value={newFolder}
+                    onChange={e => setNewFolder(e.target.value)}
+                    onBlur={() => setShowAddFolder(false)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && newFolder.trim()) {
+                        const name = newFolder.trim();
+                        if (!folderList.includes(name)) setFolderList(prev => [...prev, name]);
+                        setSelectedFolder(name);
+                        setNewFolder('');
+                        setShowAddFolder(false);
+                        setPage(1);
+                        setHasMore(true);
+                        fetchGalleryOverview(name, 1);
+                      }
+                    }}
+                    autoFocus
+                  />
+                )}
+                {selectedFolder !== '/' && (
+                  <>
+                    <button className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-yellow-600 text-yellow-300 border ml-2" onClick={() => { setShowRenameInput(true); setRenameFolder(selectedFolder); }} type="button">重命名</button>
+                    <button className="px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-red-600 text-red-300 border ml-2" onClick={() => handleDeleteFolder(selectedFolder)} type="button">删除</button>
+                  </>
+                )}
+                {showRenameInput && (
+                  <input
+                    className="ml-2 border rounded px-2 py-1 bg-[#232b36] text-gray-100"
+                    placeholder="新文件夹名"
+                    value={renameFolder}
+                    onChange={e => setRenameFolder(e.target.value)}
+                    onBlur={() => setShowRenameInput(false)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && renameFolder.trim()) {
+                        handleRenameFolder(selectedFolder, renameFolder.trim());
+                      }
+                    }}
+                    autoFocus
+                  />
                 )}
               </div>
               {/* 标签输入 */}
@@ -1025,7 +897,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     setSelectedFolder(e.target.value);
                     setPage(1);
                     setHasMore(true);
-                    fetchHistory(search, tagFilter, filenameFilter, 1, false);
+                    fetchGalleryOverview(e.target.value, 1);
                   }}
                 >
                   {folderList.map(folder => (
@@ -1053,7 +925,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                         setShowAddFolder(false);
                         setPage(1);
                         setHasMore(true);
-                        fetchHistory(search, tagFilter, filenameFilter, 1, false);
+                        fetchGalleryOverview(name, 1);
                       }
                     }}
                     autoFocus
@@ -1124,9 +996,8 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   </>
                 )}
               </div>
-              {loading ? (
-                <p className="text-gray-500 text-center py-6">加载中...</p>
-              ) : history.length === 0 ? (
+              {/* 加载状态 */}
+              {history.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10">
                   <svg className="w-16 h-16 text-gray-300 mb-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   <p className="text-gray-500 text-center">暂无上传记录</p>
@@ -1140,12 +1011,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   >
                     {displayItems.map(renderMasonryItem)}
                   </Masonry>
-                  {isLoadingMore && (
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '16px 0' }}>
-                      {Array.from({ length: 4 }, (_, i) => <SkeletonItem key={'more-' + i} />)}
-                    </div>
-                  )}
-                  {hasMore && !isLoadingMore && (
+                  {hasMore && (
                     <div style={{textAlign:'center',padding:'16px'}}>
                       <button
                         style={{
@@ -1154,7 +1020,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                         onClick={() => {
                           const nextPage = page + 1;
                           setPage(nextPage);
-                          fetchHistory(search, tagFilter, filenameFilter, nextPage, true);
+                          fetchGalleryOverview(selectedFolder, nextPage);
                         }}
                       >加载更多</button>
                       <button
@@ -1192,111 +1058,110 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
               {/* 统计区块融合到设置项最上方 */}
               <div className="flex gap-8 mb-8">
                 <div className="flex-1 flex flex-col items-center">
-                  <span className="text-2xl font-bold text-cyan-400">{stats.total}</span>
+                  <span className="text-2xl font-bold text-cyan-400">{history.length}</span>
                   <span className="text-xs text-gray-400 mt-1">上传总数</span>
                 </div>
                 <div className="flex-1 flex flex-col items-center">
-                  <span className="text-2xl font-bold text-cyan-400">{(stats.size / 1024 / 1024).toFixed(2)} MB</span>
+                  <span className="text-2xl font-bold text-cyan-400">{(history.reduce((sum, item) => sum + (typeof (item as any).size === 'number' ? (item as any).size : 0), 0) / 1024 / 1024).toFixed(2)} MB</span>
                   <span className="text-xs text-gray-400 mt-1">空间占用</span>
                 </div>
               </div>
               <h2 className="text-lg font-bold mb-4 text-cyan-400">系统设置</h2>
-              {settings ? (
-                <div className="space-y-6">
-                  <div>
-                    <div className="text-sm text-gray-300 font-bold mb-1">页面标题</div>
-                    <div className="flex items-center">
-                      <input
-                        className="border rounded px-2 py-2 bg-[#232b36] text-gray-100 flex-1"
-                        value={titleInput}
-                        onChange={e => setTitleInput(e.target.value)}
-                        placeholder="图床"
-                      />
-                      <button
-                        className="ml-3 px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
-                        onClick={() => {
-                          setPageTitle(titleInput.trim() || '图床');
-                          localStorage.setItem('pageTitle', titleInput.trim() || '图床');
-                        }}
-                        type="button"
-                      >保存</button>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-300 font-bold mb-1">网站图标</div>
-                    <div className="flex items-center">
-                      <input
-                        type="file"
-                        accept="image/x-icon,.ico,image/svg+xml,.svg,image/png,.png,image/jpeg,.jpg,.jpeg,image/gif,.gif,image/bmp,.bmp,image/webp,.webp"
-                        onChange={e => setFaviconFile(e.target.files?.[0] || null)}
-                        className="hidden"
-                        id="favicon-upload"
-                      />
-                      <button
-                        type="button"
-                        className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-cyan-700 mr-3"
-                        onClick={() => document.getElementById('favicon-upload')?.click()}
-                      >选择文件</button>
-                      <span className="text-xs text-gray-400 truncate max-w-[120px] inline-block align-middle">{faviconFile?.name || ''}</span>
-                      <button
-                        className="ml-3 px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
-                        onClick={async () => {
-                          if (faviconFile) {
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              if (typeof reader.result === 'string') {
-                                setFaviconUrl(reader.result);
-                                localStorage.setItem('faviconUrl', reader.result);
-                              }
-                            };
-                            reader.readAsDataURL(faviconFile);
-                          }
-                        }}
-                        type="button"
-                        disabled={!faviconFile}
-                      >保存</button>
-                    </div>
-                  </div>
-                  <div className="mt-6">
-                    <div className="text-sm text-gray-300 mb-1">最大并发上传数（1~5，建议3）：</div>
+              <div className="space-y-6">
+                <div>
+                  <div className="text-sm text-gray-300 font-bold mb-1">页面标题</div>
+                  <div className="flex items-center">
                     <input
-                      type="number"
-                      min={1}
-                      max={5}
-                      value={maxConcurrentUploads}
-                      onChange={e => {
-                        setMaxConcurrentUploads(Math.max(1, Math.min(5, Number(e.target.value))));
-                        localStorage.setItem('maxConcurrentUploads', String(Math.max(1, Math.min(5, Number(e.target.value)))));
-                      }}
-                      className="border rounded px-2 py-1 bg-[#232b36] text-gray-100 w-16"
+                      className="border rounded px-2 py-2 bg-[#232b36] text-gray-100 flex-1"
+                      value={titleInput}
+                      onChange={e => setTitleInput(e.target.value)}
+                      placeholder="图床"
                     />
-                  </div>
-                  <div className="flex justify-end pt-4 gap-4">
                     <button
-                      className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-red-600"
-                      onClick={handleLogout}
-                    >退出登录</button>
-                    <button
-                      className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
-                      onClick={async () => {
-                        setToast({ message: '正在去重...', type: 'info' });
-                        try {
-                          const res = await fetch('/api/deduplicate', { method: 'POST', credentials: 'include' });
-                          const data = await res.json();
-                          if (data.status === 'success') {
-                            setToast({ message: `去重完成，删除了${data.deleted || 0}条重复图片`, type: 'success' });
-                            fetchStats();
-                          } else {
-                            setToast({ message: data.message || '去重失败', type: 'error' });
-                          }
-                        } catch (e) {
-                          setToast({ message: '去重失败，请重试', type: 'error' });
-                        }
+                      className="ml-3 px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                      onClick={() => {
+                        setPageTitle(titleInput.trim() || '图床');
+                        localStorage.setItem('pageTitle', titleInput.trim() || '图床');
                       }}
-                    >去重</button>
+                      type="button"
+                    >保存</button>
                   </div>
                 </div>
-              ) : <div className="text-gray-400">加载中...</div>}
+                <div>
+                  <div className="text-sm text-gray-300 font-bold mb-1">网站图标</div>
+                  <div className="flex items-center">
+                    <input
+                      type="file"
+                      accept="image/x-icon,.ico,image/svg+xml,.svg,image/png,.png,image/jpeg,.jpg,.jpeg,image/gif,.gif,image/bmp,.bmp,image/webp,.webp"
+                      onChange={e => setFaviconFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                      id="favicon-upload"
+                    />
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-cyan-700 mr-3"
+                      onClick={() => document.getElementById('favicon-upload')?.click()}
+                    >选择文件</button>
+                    <span className="text-xs text-gray-400 truncate max-w-[120px] inline-block align-middle">{faviconFile?.name || ''}</span>
+                    <button
+                      className="ml-3 px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                      onClick={async () => {
+                        if (faviconFile) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            if (typeof reader.result === 'string') {
+                              setFaviconUrl(reader.result);
+                              localStorage.setItem('faviconUrl', reader.result);
+                            }
+                          };
+                          reader.readAsDataURL(faviconFile);
+                        }
+                      }}
+                      type="button"
+                      disabled={!faviconFile}
+                    >保存</button>
+                  </div>
+                </div>
+                <div className="mt-6">
+                  <div className="text-sm text-gray-300 mb-1">最大并发上传数（1~5，建议3）：</div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={maxConcurrentUploads}
+                    onChange={e => {
+                      setMaxConcurrentUploads(Math.max(1, Math.min(5, Number(e.target.value))));
+                      localStorage.setItem('maxConcurrentUploads', String(Math.max(1, Math.min(5, Number(e.target.value)))));
+                    }}
+                    className="border rounded px-2 py-1 bg-[#232b36] text-gray-100 w-16"
+                  />
+                </div>
+                <div className="flex justify-end pt-4 gap-4">
+                  <button
+                    className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-red-600"
+                    onClick={handleLogout}
+                  >退出登录</button>
+                  <button
+                    className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                    onClick={async () => {
+                      setToast({ message: '正在去重...', type: 'info' });
+                      try {
+                        const res = await fetch('/api/deduplicate', { method: 'POST', credentials: 'include' });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                          setToast({ message: `去重完成，删除了${data.deleted || 0}条重复图片`, type: 'success' });
+                          // fetchHistory(search, tagFilter, filenameFilter); // 移除旧的 fetchHistory 调用
+                          fetchGalleryOverview(selectedFolder, 1);
+                        } else {
+                          setToast({ message: data.message || '去重失败', type: 'error' });
+                        }
+                      } catch (e) {
+                        setToast({ message: '去重失败，请重试', type: 'error' });
+                      }
+                    }}
+                  >去重</button>
+                </div>
+              </div>
             </div>
           </div>
         )}

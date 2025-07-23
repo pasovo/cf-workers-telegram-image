@@ -411,10 +411,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       });
       const data = await res.json();
       if (res.ok && data.status === 'success') {
-        setIsAuthed(true);
-        setLoginUser('');
-        setLoginPass('');
-        setLoginError('');
+        window.location.reload(); // 登录成功后强制刷新页面
       } else {
         setLoginError(data.message || '登录失败');
       }
@@ -432,8 +429,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     window.location.reload(); // 强制刷新页面，确保 cookie 失效后重新鉴权
   };
 
-  // 2. 登录判断和所有条件渲染都放在所有 Hook 之后
-  // 用 content 变量保存渲染内容
   let content;
   if (!isAuthed) {
     content = (

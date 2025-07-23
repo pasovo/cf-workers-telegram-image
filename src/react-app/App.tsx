@@ -31,10 +31,10 @@ function App() {
   if (!authChecked) {
     return <div className="min-h-screen flex items-center justify-center bg-[#10151b] text-white text-lg">正在检查登录状态...</div>;
   }
-  return <AppContent isAuthed={isAuthed} setIsAuthed={setIsAuthed} />;
+  return <AppContent isAuthed={isAuthed} />;
 }
 
-function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed: (v: boolean) => void }) {
+function AppContent({ isAuthed }: { isAuthed: boolean }) {
   // 所有 hooks 顶层声明
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
@@ -526,6 +526,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       setShowAddTag(false);
     };
 
+    // 统一按钮样式
+    // 有效期按钮样式
+    const btnBase = 'px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-gray-300 hover:border-cyan-400';
+    const btnActive = 'bg-cyan-500 border-cyan-400 text-white';
+    const btnDisabled = 'disabled:opacity-50';
+    const btnPrimary = 'bg-cyan-600 border-cyan-400 text-white hover:bg-cyan-700';
+    const btnDanger = 'bg-red-600 border-red-400 text-white hover:bg-red-700';
+
     content = (
       <div className="w-full min-h-screen bg-[#10151b]">
         {/* 顶部导航栏 */}
@@ -616,7 +624,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   <button
                     key={opt.value}
                     type="button"
-                    className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 mr-2 mb-1 ${expire === opt.value ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                    className={`${btnBase} mr-2 mb-1 ${expire === opt.value ? btnActive : ''}`}
                     onClick={() => setExpire(opt.value)}
                   >
                     {expire === opt.value ? '✓ ' : ''}{opt.label}
@@ -629,7 +637,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 <div className="pt-2">
                   <button
                     type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                    className={`${btnBase} ${btnPrimary} ${btnDisabled}`}
                     disabled={files.length === 0}
                   >
                     {files.length === 0 ? '请选择图片' : '批量上传'}
@@ -671,7 +679,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     <button
                       key={tag}
                       type="button"
-                      className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${tagFilter === tag ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                      className={`${btnBase} ${tagFilter === tag ? btnActive : ''}`}
                       onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
                     >
                       {tag}
@@ -682,18 +690,18 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 <div className="flex items-center gap-2 mb-2">
                   <button
                     type="button"
-                    className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${selectMode ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                    className={`${btnBase} ${selectMode ? btnActive : ''}`}
                     onClick={() => setSelectMode(v => !v)}
                   >{selectMode ? '取消选择' : '选择'}</button>
                   {selectMode && (
                     <>
                       <button
                         type="button"
-                        className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 ${selected.length === history.length && history.length > 0 ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                        className={`${btnBase} ${selected.length === history.length && history.length > 0 ? btnActive : ''}`}
                         onClick={() => handleSelectAll(!(selected.length === history.length && history.length > 0))}
                       >{selected.length === history.length && history.length > 0 ? '✓ ' : ''}全选</button>
-                      <button className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-gray-100 hover:border-cyan-400 disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
-                      <button className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-gray-100 hover:border-cyan-400 disabled:opacity-50" disabled={selected.length === 0} onClick={handleBatchExport}>导出JSON</button>
+                      <button className={`${btnBase} ${btnDanger} ${btnDisabled}`} disabled={selected.length === 0} onClick={handleBatchDelete}>批量删除</button>
+                      <button className={`${btnBase} ${btnDanger}`} onClick={handleBatchExport}>导出JSON</button>
                       <select
                         className="bg-[#232b36] text-gray-100 border rounded px-2 py-1 ml-2"
                         value={''}
@@ -725,9 +733,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     {hasMore && (
                       <div style={{textAlign:'center',padding:'16px'}}>
                         <button
-                          style={{
-                            background: '#22d3ee', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 32px', fontSize: 16, cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 8px #22d3ee33', marginRight: 16
-                          }}
+                          className="bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-cyan-400 disabled:cursor-not-allowed"
                           onClick={() => {
                             const nextPage = page + 1;
                             setPage(nextPage);
@@ -735,9 +741,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                           }}
                         >加载更多</button>
                         <button
-                          style={{
-                            background: '#232b36', color: '#22d3ee', border: 'none', borderRadius: 8, padding: '8px 32px', fontSize: 16, cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 8px #22d3ee33'
-                          }}
+                          className="bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-cyan-400 disabled:cursor-not-allowed"
                           onClick={() => {
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
@@ -748,10 +752,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                       <div style={{textAlign:'center',color:'#888',padding:'12px'}}>
                         没有更多了
                         <button
-                          style={{
-                            marginLeft: 24,
-                            background: '#232b36', color: '#22d3ee', border: 'none', borderRadius: 8, padding: '8px 32px', fontSize: 16, cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 8px #22d3ee33'
-                          }}
+                          className="bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-cyan-400 disabled:cursor-not-allowed"
                           onClick={() => {
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
@@ -849,11 +850,11 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   </div>
                   <div className="flex justify-end pt-4 gap-4">
                     <button
-                      className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-red-600"
+                      className={`${btnBase} ${btnDanger}`}
                       onClick={handleLogout}
                     >退出登录</button>
                     <button
-                      className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+                      className={`${btnBase} ${btnPrimary}`}
                       onClick={async () => {
                         showToast({ message: '正在去重...', type: 'info' });
                         try {

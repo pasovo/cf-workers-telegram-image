@@ -52,6 +52,8 @@ jobs:
           if [ -n "${{ secrets.SHORTLINK_DOMAIN }}" ]; then
             echo "${{ secrets.SHORTLINK_DOMAIN }}" | npx wrangler secret put SHORTLINK_DOMAIN
           fi
+          # 自动生成并注入 JWT_SECRET
+          openssl rand -hex 32 | npx wrangler secret put JWT_SECRET
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
 

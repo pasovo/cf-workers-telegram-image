@@ -179,17 +179,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     setPage(1);
     setHasMore(true);
     fetchHistory(search, tagFilter, filenameFilter, 1, false);
-    // eslint-disable-next-line
   }, [isAuthed, search, tagFilter, filenameFilter]);
-
-  // 4. Masonry滚动到底部时加载更多
-  // const handleMasonryEndReached = () => {
-  //   if (hasMore && !isLoadingMore) {
-  //     const nextPage = page + 1;
-  //     setPage(nextPage);
-  //     fetchHistory(search, tagFilter, filenameFilter, nextPage, true);
-  //   }
-  // };
 
   // 处理文件添加（多选、拖拽、粘贴）
   // 修改 handleAddFiles，自动去重
@@ -371,33 +361,65 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     let active = 0;
     let finished = 0;
     const total = files.length;
+    const failedIdxLocal: number[] = [];
+    // 新增：用 Set 记录正在上传的文件唯一 key，防止同一文件并发上传
+    const uploadingFileKeySet = new Set<string>();
+    // 新增：用 Set 记录正在上传的 hash，防止 hash 并发竞态
+    const localUploadingHashes = new Set<string>();
     const next = async () => {
       if (uploadQueueRef.current.length === 0) return;
       if (active >= maxConcurrentUploads) return;
       const idx = files.length - uploadQueueRef.current.length;
       const file = uploadQueueRef.current.shift();
       if (!file) return;
+      // 先锁定文件唯一 key（如 name+size），防止同一文件并发上传
+      const fileKey = file.name + '_' + file.size;
+      if (uploadingFileKeySet.has(fileKey)) {
+        finished++;
+        setTotalProgress(Math.round((finished / total) * 100));
+        if (finished < total) next();
+        return;
+      }
+      uploadingFileKeySet.add(fileKey);
       setUploadingIdx(prev => [...prev, idx]);
       active++;
       try {
+        // 计算 hash
+        const hash = await calcFileHash(file);
+        // hash 去重，防止并发竞态
+        if (localUploadingHashes.has(hash)) {
+          finished++;
+          setTotalProgress(Math.round((finished / total) * 100));
+          setUploadingIdx(prev => prev.filter(i => i !== idx));
+          uploadingFileKeySet.delete(fileKey);
+          if (finished < total) next();
+          return;
+        }
+        localUploadingHashes.add(hash);
+        // 上传
         await uploadFile(file);
         setUploadingIdx(prev => prev.filter(i => i !== idx));
         fetchHistory(search, tagFilter, filenameFilter);
       } catch {
         setUploadingIdx(prev => prev.filter(i => i !== idx));
-        setFailedIdx(prev => [...prev, idx]);
+        failedIdxLocal.push(idx);
+      } finally {
+        // 上传完成后移除锁定
+        uploadingFileKeySet.delete(fileKey);
+        // hash 也可以移除（如需允许同 hash 文件后续重试）
+        // localUploadingHashes.delete(hash); // 可选
+        active--;
+        finished++;
+        setTotalProgress(Math.round((finished / total) * 100));
+        if (finished < total) next();
       }
-      active--;
-      finished++;
-      setTotalProgress(Math.round((finished / total) * 100));
-      if (finished < total) next();
     };
     // 启动并发上传
     for (let i = 0; i < maxConcurrentUploads; i++) next();
     // 等待全部完成
     while (finished < total) await new Promise(r => setTimeout(r, 100));
-    // 上传成功的图片从队列移除，失败的保留
-    setFiles(prev => prev.filter((_, i) => failedIdx.includes(i)));
+    setFiles(prev => prev.filter((_, i) => failedIdxLocal.includes(i)));
+    setFailedIdx(failedIdxLocal);
     setPending(false);
     setTotalProgress(0);
   };

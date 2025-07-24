@@ -1019,7 +1019,12 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 <FolderSelectModal open={uploadFolderModalOpen} onClose={() => setUploadFolderModalOpen(false)} onConfirm={f => { setUploadFolder(f); setUploadFolderModalOpen(false); }} folders={allFolders} currentFolder={uploadFolder} />
                 <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
                   {/* 拖拽/粘贴/多选上传区域 */}
-                  <div className="space-y-2 flex flex-col items-center">
+                  <div
+                    className={`space-y-2 flex flex-col items-center ${dragActive ? 'ring-2 ring-cyan-400' : ''}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
                     <label
                       htmlFor="photo"
                       className="w-full bg-[#232b36] hover:bg-[#232b36]/80 text-gray-200 font-medium py-2 px-4 rounded-md border border-[#232b36] transition duration-300 flex items-center justify-center cursor-pointer"

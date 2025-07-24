@@ -9,5 +9,6 @@ CREATE TABLE IF NOT EXISTS images (
   filename TEXT,
   size INTEGER,
   folder TEXT DEFAULT '/',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  content_type TEXT
 );

@@ -129,10 +129,11 @@ app.post('/api/upload', async (c) => {
       // 保存记录到数据库（增加folder字段）
       try {
         const size = photoFile.size;
+        const contentType = photoFile.type || 'image/jpeg';
         const stmt = DB.prepare(
-          'INSERT INTO images (file_id, thumb_file_id, chat_id, short_code, expire_at, tags, filename, size, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)' 
+          'INSERT INTO images (file_id, thumb_file_id, chat_id, short_code, expire_at, tags, filename, size, folder, content_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)' 
         );
-        const dbResult = await stmt.bind(file_id, thumb_file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size, folder).run();
+        const dbResult = await stmt.bind(file_id, thumb_file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size, folder, contentType).run();
         if (!dbResult.success) {
             throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
         }
@@ -179,8 +180,8 @@ app.get('/api/get_photo/:file_id', async (c) => {
   const { TG_BOT_TOKEN, DB } = c.env;
   let file_id = c.req.param('file_id');
   const isThumb = c.req.query('thumb') === '1';
-  // 查找file_id和thumb_file_id
-  const row = await DB.prepare('SELECT file_id, thumb_file_id FROM images WHERE file_id = ? OR thumb_file_id = ?').bind(file_id, file_id).first();
+  // 查找file_id和thumb_file_id和content_type
+  const row = await DB.prepare('SELECT file_id, thumb_file_id, content_type FROM images WHERE file_id = ? OR thumb_file_id = ?').bind(file_id, file_id).first();
   if (!row) {
     return c.json({ status: 'error', message: '图片不存在' }, { status: 404 });
   }
@@ -200,7 +201,7 @@ app.get('/api/get_photo/:file_id', async (c) => {
       `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`
     );
     const imageRes = await imageResponse.arrayBuffer();
-    const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+    const contentType = typeof row.content_type === 'string' ? row.content_type : 'image/jpeg';
     return new Response(imageRes, {
       status: 200,
       headers: {

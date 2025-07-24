@@ -1459,7 +1459,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     setImgInfo(prev => ({ ...prev, width: target.naturalWidth, height: target.naturalHeight }));
                   }
                 }}
-                onError={e => {
+                onError={() => {
                   setImgInfo(prev => ({ ...prev, size: -1 }));
                 }}
               />

@@ -755,13 +755,16 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   );
 
   // ProgressiveImage 组件：支持 onLoad/onError 回调
-  function ProgressiveImage({ file_id, alt, className, style, onLoad, onError }: {
+  function ProgressiveImage({
+    file_id, alt, className, style, onLoad, onError, onOriginalLoad
+  }: {
     file_id: string,
     alt?: string,
     className?: string,
     style?: React.CSSProperties,
     onLoad?: (e: React.SyntheticEvent<HTMLImageElement, Event>) => void,
-    onError?: (e: React.SyntheticEvent<HTMLImageElement, Event>) => void
+    onError?: (e: React.SyntheticEvent<HTMLImageElement, Event>) => void,
+    onOriginalLoad?: (e: React.SyntheticEvent<HTMLImageElement, Event>) => void
   }) {
     const [src, setSrc] = React.useState(`/api/get_photo/${file_id}?thumb=1`);
     const loadedRef = React.useRef(false);
@@ -785,7 +788,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         className={className}
         style={style}
         loading="lazy"
-        onLoad={onLoad}
+        onLoad={e => {
+          if (src.endsWith('?thumb=1')) {
+            if (onLoad) onLoad(e); // 缩略图加载
+          } else {
+            if (onOriginalLoad) onOriginalLoad(e); // 原图加载
+          }
+        }}
         onError={e => {
           if (onError) onError(e);
           (e.currentTarget as HTMLImageElement).src = 'https://via.placeholder.com/200?text=加载失败';
@@ -1432,11 +1441,11 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         </div>
       {/* 图片详情弹窗 */}
       {modalOpen && modalItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={closeModal}>
-          <div className="bg-[#181f29] rounded-2xl shadow-2xl p-6 w-full max-w-md relative" onClick={e => e.stopPropagation()}>
-            <button className="absolute top-2 right-2 text-gray-400 hover:text-cyan-400 text-2xl" onClick={closeModal}>×</button>
-            <div style={{minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'}}>
-              {/* 加载动画，未加载完时显示 */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={closeModal}>
+          <div className="bg-[#181f29] rounded-2xl shadow-2xl p-0 w-full h-full max-w-full max-h-full relative flex flex-col" onClick={e => e.stopPropagation()}>
+            <button className="absolute top-4 right-6 text-gray-400 hover:text-cyan-400 text-3xl z-10" onClick={closeModal}>×</button>
+            <div style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: 0}}>
+              {/* 图片和加载动画等内容 */}
               {!imgInfo.width && !imgInfo.size && (
                 <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 2}} className="w-full h-80 flex items-center justify-center bg-[#232b36] animate-pulse rounded">
                   <span className="text-gray-400">图片加载中...</span>
@@ -1448,11 +1457,11 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   <span className="text-red-400">图片加载失败</span>
                 </div>
               )}
-              <ProgressiveImage
-                file_id={modalItem.file_id}
+              <img
+                src={`/api/get_photo/${modalItem.file_id}`}
                 alt="大图"
-                className="w-full rounded mb-4 bg-[#232b36]"
-                style={{maxHeight: 320, objectFit: 'contain', opacity: imgInfo.width ? 1 : 0, transition: 'opacity 0.3s'}}
+                className="w-full h-full object-contain bg-[#232b36]"
+                style={{ maxHeight: '90vh', maxWidth: '90vw', margin: '0 auto', display: 'block' }}
                 onLoad={e => {
                   const target = e.currentTarget as HTMLImageElement | null;
                   if (target && target.naturalWidth && target.naturalHeight) {

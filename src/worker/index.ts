@@ -212,19 +212,22 @@ app.get('/api/get_photo/:file_id', async (c) => {
     return c.json({ status: 'error', message: '获取文件失败' });
   }
 });
-// 批量删除接口
+// 批量删除接口（加事务）
 app.post('/api/delete', async (c) => {
   const { DB } = c.env;
   const { ids } = await c.req.json(); // ids: file_id[]
   if (!Array.isArray(ids) || ids.length === 0) {
     return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
   }
+  await DB.exec('BEGIN TRANSACTION');
   try {
     for (const id of ids) {
       await DB.prepare('DELETE FROM images WHERE file_id = ?').bind(id).run();
     }
+    await DB.exec('COMMIT');
     return c.json({ status: 'success' });
   } catch (error) {
+    await DB.exec('ROLLBACK');
     return c.json({ status: 'error', message: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 });
@@ -411,14 +414,21 @@ app.post('/api/folders', async (c) => {
   // 新建文件夹（仅逻辑，实际只需前端传递folder即可）
   return c.json({ status: 'success' });
 });
+// 删除文件夹时递归删除所有子文件夹和图片（加事务）
 app.delete('/api/folders', async (c) => {
   // 删除文件夹及其所有子文件夹和图片
   const { folder } = await c.req.json();
   const { DB } = c.env;
   if (!folder || typeof folder !== 'string') return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
-  // 删除所有以该folder为前缀的图片
-  await DB.prepare('DELETE FROM images WHERE folder = ? OR folder LIKE ?').bind(folder, folder + '%').run();
-  return c.json({ status: 'success' });
+  await DB.exec('BEGIN TRANSACTION');
+  try {
+    await DB.prepare('DELETE FROM images WHERE folder = ? OR folder LIKE ?').bind(folder, folder + '%').run();
+    await DB.exec('COMMIT');
+    return c.json({ status: 'success' });
+  } catch (e) {
+    await DB.exec('ROLLBACK');
+    return c.json({ status: 'error', message: '批量删除文件夹失败' });
+  }
 });
 app.put('/api/folders', async (c) => {
   // 重命名文件夹
@@ -437,7 +447,7 @@ app.put('/api/folders', async (c) => {
   return c.json({ status: 'success' });
 });
 
-// 批量移动图片
+// 批量移动图片（加事务）
 app.post('/api/move_images', async (c) => {
   const { ids, target_folder } = await c.req.json();
   const { DB } = c.env;
@@ -453,12 +463,19 @@ app.post('/api/move_images', async (c) => {
       return c.json({ status: 'error', message: '文件夹名仅允许中英文、数字、下划线' }, { status: 400 });
     }
   }
-  for (const id of ids) {
-    await DB.prepare('UPDATE images SET folder = ? WHERE file_id = ?').bind(folder, id).run();
+  await DB.exec('BEGIN TRANSACTION');
+  try {
+    for (const id of ids) {
+      await DB.prepare('UPDATE images SET folder = ? WHERE file_id = ?').bind(folder, id).run();
+    }
+    await DB.exec('COMMIT');
+    return c.json({ status: 'success' });
+  } catch (e) {
+    await DB.exec('ROLLBACK');
+    return c.json({ status: 'error', message: '批量移动失败' });
   }
-  return c.json({ status: 'success' });
 });
-// 批量复制图片
+// 批量复制图片（加事务）
 app.post('/api/copy_images', async (c) => {
   const { ids, target_folder } = await c.req.json();
   const { DB, TG_CHAT_ID } = c.env;
@@ -474,26 +491,33 @@ app.post('/api/copy_images', async (c) => {
       return c.json({ status: 'error', message: '文件夹名仅允许中英文、数字、下划线' }, { status: 400 });
     }
   }
-  for (const id of ids) {
-    const row = await DB.prepare('SELECT * FROM images WHERE file_id = ?').bind(id).first();
-    if (!row) continue;
-    // 生成新 short_code
-    let short_code = '';
-    let tryCount = 0;
-    while (true) {
-      short_code = genShortCode();
-      const check = await DB.prepare('SELECT 1 FROM images WHERE short_code = ?').bind(short_code).first();
-      if (!check) break;
-      tryCount++;
-      if (tryCount > 5) throw new Error('短码生成失败，请重试');
+  await DB.exec('BEGIN TRANSACTION');
+  try {
+    for (const id of ids) {
+      const row = await DB.prepare('SELECT * FROM images WHERE file_id = ?').bind(id).first();
+      if (!row) continue;
+      // 生成新 short_code
+      let short_code = '';
+      let tryCount = 0;
+      while (true) {
+        short_code = genShortCode();
+        const check = await DB.prepare('SELECT 1 FROM images WHERE short_code = ?').bind(short_code).first();
+        if (!check) break;
+        tryCount++;
+        if (tryCount > 5) throw new Error('短码生成失败，请重试');
+      }
+      await DB.prepare(
+        'INSERT INTO images (file_id, thumb_file_id, chat_id, short_code, expire_at, tags, filename, size, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        row.file_id, row.thumb_file_id, TG_CHAT_ID, short_code, row.expire_at, row.tags, row.filename, row.size, folder
+      ).run();
     }
-    await DB.prepare(
-      'INSERT INTO images (file_id, thumb_file_id, chat_id, short_code, expire_at, tags, filename, size, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(
-      row.file_id, row.thumb_file_id, TG_CHAT_ID, short_code, row.expire_at, row.tags, row.filename, row.size, folder
-    ).run();
+    await DB.exec('COMMIT');
+    return c.json({ status: 'success' });
+  } catch (e) {
+    await DB.exec('ROLLBACK');
+    return c.json({ status: 'error', message: '批量复制失败' });
   }
-  return c.json({ status: 'success' });
 });
 
 

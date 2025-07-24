@@ -232,7 +232,20 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const LIMIT = 50;
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  // 1. 在 AppContent 组件顶部添加图库缓存
+  const galleryCache = React.useRef<{ [key: string]: any[] }>({});
+  // 2. 修改 fetchImages，先查缓存
   const fetchImages = async (searchVal = '', tagVal = '', filenameVal = '', pageNum = 1, append = false, folderPath = '') => {
+    const cacheKey = `${searchVal}|${tagVal}|${filenameVal}|${pageNum}|${folderPath}`;
+    if (galleryCache.current[cacheKey]) {
+      if (append) {
+        setHistory(prev => [...prev, ...galleryCache.current[cacheKey]]);
+      } else {
+        setHistory(galleryCache.current[cacheKey]);
+      }
+      setHasMore(galleryCache.current[cacheKey].length === LIMIT);
+      return;
+    }
     if (!isAuthed) return;
     setLoading(true);
     try {
@@ -252,6 +265,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         } else {
           setHistory(data.data);
         }
+        galleryCache.current[cacheKey] = data.data;
         // 提取所有图片的标签
         const allTags = data.data
           .map((item: any) => (item.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean))
@@ -452,6 +466,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     });
   };
 
+  // 3. 优化 handleUploadAll，上传全部完成后只刷新一次图片列表
   const handleUploadAll = async () => {
     if (files.length === 0) return;
     setPending(true);
@@ -498,7 +513,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         // 上传
         await uploadFile(file);
         setUploadingIdx(prev => prev.filter(i => i !== idx));
-        fetchImages(search, tagFilter, filenameFilter, 1, false);
+        // 不再每次上传后刷新图片列表
       } catch {
         setUploadingIdx(prev => prev.filter(i => i !== idx));
         failedIdxLocal.push(idx);
@@ -521,6 +536,8 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     setFailedIdx(failedIdxLocal);
     setPending(false);
     setTotalProgress(0);
+    // 上传全部完成后只刷新一次图片列表
+    fetchImages(search, tagFilter, filenameFilter, 1, false, uploadFolder);
   };
 
   // 复制短链/Markdown/HTML

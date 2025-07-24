@@ -1472,16 +1472,16 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
               <div className="text-xs text-gray-400">大小：{imgInfo.size > 0 ? (imgInfo.size > 1024*1024 ? (imgInfo.size/1024/1024).toFixed(2)+' MB' : (imgInfo.size/1024).toFixed(1)+' KB') : '-'}</div>
               {modalItem.short_code && (
                 <>
-                  <div className="text-xs text-gray-400">直链：
+                  <div className="text-xs text-gray-400 flex items-center">直链：
                     <a href={`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline break-all ml-1">{`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`}</a>
                     <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`)}>复制</button>
                   </div>
-                  <div className="text-xs text-gray-400">Markdown：
-                    <input className="border px-1 py-0.5 text-xs w-60 bg-[#232b36] text-gray-100 ml-1" value={`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`} readOnly />
+                  <div className="text-xs text-gray-400 flex items-center">Markdown：
+                    <a href={`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline mx-1" style={{ wordBreak: 'break-all' }}>{`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`}</a>
                     <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`)}>复制</button>
                   </div>
-                  <div className="text-xs text-gray-400">HTML：
-                    <input className="border px-1 py-0.5 text-xs w-60 bg-[#232b36] text-gray-100 ml-1" value={`<img src="${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}" />`} readOnly />
+                  <div className="text-xs text-gray-400 flex items-center">HTML：
+                    <a href={`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline mx-1" style={{ wordBreak: 'break-all' }}>{`<img src="${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}" />`}</a>
                     <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`<img src="${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}" />`)}>复制</button>
                   </div>
                 </>

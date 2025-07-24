@@ -306,7 +306,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [totalProgress, setTotalProgress] = useState(0);
 
   // 单文件上传逻辑，供多线程上传队列调用
-  // 修改 uploadFile，上传时带 hash 字段
   const uploadFile = async (file: File) => {
     let uploadFile = file;
     if (file.size > 10 * 1024 * 1024) {
@@ -316,14 +315,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         throw new Error('图片过大');
       }
     }
-    const hash = await calcFileHash(uploadFile);
     const formData = new FormData();
     formData.append('photo', uploadFile);
     formData.append('expire', expire);
     const tagsToUpload = selectedTags.length > 0 ? selectedTags : ['默认'];
     formData.append('tags', tagsToUpload.join(','));
     formData.append('filename', uploadFile.name);
-    formData.append('hash', hash);
+    // 不再传 hash 字段
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/upload');
@@ -362,9 +360,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     let finished = 0;
     const total = files.length;
     const failedIdxLocal: number[] = [];
-    // 新增：用 Set 记录正在上传的文件唯一 key，防止同一文件并发上传
     const uploadingFileKeySet = new Set<string>();
-    // 新增：用 Set 记录正在上传的 hash，防止 hash 并发竞态
     const localUploadingHashes = new Set<string>();
     const next = async () => {
       if (uploadQueueRef.current.length === 0) return;
@@ -685,6 +681,89 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const displayItems = loading && history.length === 0
     ? Array.from({ length: 20 }, (_, i) => ({ skeleton: true, id: 'skeleton-' + i }))
     : history;
+
+  // 在 AppContent 组件内部添加 handleDeduplicate 函数（带进度条和并发下载）
+  const handleDeduplicate = async () => {
+    setToast({ message: '正在去重...', type: 'info' });
+    setDedupProgress(0); // 新增dedupProgress状态
+    // 1. 拉取所有图片历史（分页拉取）
+    type ImageItem = { file_id: string; filename?: string };
+    let allImages: ImageItem[] = [];
+    let page = 1, hasMore = true;
+    const pageSize = 100;
+    while (hasMore) {
+      const res = await fetch(`/api/history?page=${page}&limit=${pageSize}`, { credentials: 'include' });
+      const data = await res.json();
+      if (data.status === 'success') {
+        allImages = allImages.concat(data.data as ImageItem[]);
+        hasMore = (data.data as ImageItem[]).length === pageSize;
+        page++;
+      } else {
+        setToast({ message: '加载图片历史失败', type: 'error' });
+        setDedupProgress(0);
+        return;
+      }
+    }
+    // 2. 并发下载所有图片并计算 hash
+    const hashMap: Record<string, ImageItem[]> = {};
+    const toDelete: string[] = [];
+    const concurrency = 6; // 并发数
+    let finished = 0;
+    const total = allImages.length;
+    const tasks = allImages.map((img, idx) => async () => {
+      try {
+        const resp = await fetch(`/api/get_photo/${img.file_id}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const buf = await resp.arrayBuffer();
+        const hash = await calcFileHash(new File([buf], img.filename || img.file_id));
+        if (!hashMap[hash]) hashMap[hash] = [];
+        hashMap[hash].push(img);
+      } catch {}
+      finished++;
+      setDedupProgress(Math.round((finished / total) * 100));
+    });
+    // 并发执行
+    const runConcurrent = async (taskList: (() => Promise<void>)[], limit: number) => {
+      let idx = 0;
+      const runners = Array.from({ length: limit }).map(async () => {
+        while (idx < taskList.length) {
+          const cur = idx++;
+          await taskList[cur]();
+        }
+      });
+      await Promise.all(runners);
+    };
+    await runConcurrent(tasks, concurrency);
+    // 3. 分组去重，保留每组第一个，其余加入待删除
+    Object.values(hashMap).forEach((group: ImageItem[]) => {
+      if (group.length > 1) {
+        group.slice(1).forEach((img: ImageItem) => toDelete.push(img.file_id));
+      }
+    });
+    if (toDelete.length === 0) {
+      setToast({ message: '无重复图片', type: 'success' });
+      setDedupProgress(0);
+      return;
+    }
+    // 4. 批量删除
+    const res = await fetch('/api/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ ids: toDelete })
+    });
+    const data = await res.json();
+    setDedupProgress(0);
+    if (data.status === 'success') {
+      setToast({ message: `去重完成，删除了${toDelete.length}条重复图片`, type: 'success' });
+      fetchHistory();
+    } else {
+      setToast({ message: '去重失败', type: 'error' });
+    }
+  };
+
+  // 新增dedupProgress状态
+  const [dedupProgress, setDedupProgress] = useState(0);
 
   return (
     <div className="min-h-screen bg-[#10151b]">
@@ -1032,23 +1111,21 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                       >退出登录</button>
                       <button
                         className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
-                        onClick={async () => {
-                          setToast({ message: '正在去重...', type: 'info' });
-                          try {
-                            const res = await fetch('/api/deduplicate', { method: 'POST', credentials: 'include' });
-                            const data = await res.json();
-                            if (data.status === 'success') {
-                              setToast({ message: `去重完成，删除了${data.deleted || 0}条重复图片`, type: 'success' });
-                              fetchStats();
-                            } else {
-                              setToast({ message: data.message || '去重失败', type: 'error' });
-                            }
-                          } catch (e) {
-                            setToast({ message: '去重失败，请重试', type: 'error' });
-                          }
-                        }}
+                        onClick={handleDeduplicate}
                       >去重</button>
                     </div>
+                    {/* 在设置页“去重”按钮下方显示进度条 */}
+                    {dedupProgress > 0 && (
+                      <div className="w-full mb-2">
+                        <div className="w-full h-3 bg-gray-700 rounded overflow-hidden animate-pulse">
+                          <div
+                            className="h-full bg-blue-500 transition-all duration-300"
+                            style={{ width: `${dedupProgress}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1 text-center">{dedupProgress}%（去重中...）</div>
+                      </div>
+                    )}
                   </div>
                 ) : <div className="text-gray-400">加载中...</div>}
               </div>

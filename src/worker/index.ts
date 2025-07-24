@@ -1,8 +1,6 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
 import { v4 as uuidv4 } from 'uuid';
-// 1. 引入 md5 库
-import md5 from 'md5';
 
 type Bindings = {
   TG_BOT_TOKEN: string;
@@ -55,9 +53,6 @@ app.post('/api/upload', async (c) => {
           message: '请上传有效的图片文件'
       }, { status: 400 });
   }
-  // 计算 hash
-  const arrayBuffer = await photoFile.arrayBuffer();
-  const hash = md5(new Uint8Array(arrayBuffer));
   formData.append('chat_id', TG_CHAT_ID);
   // 有效期参数
   const expireOption = formData.get('expire') as string || 'forever';
@@ -69,7 +64,7 @@ app.post('/api/upload', async (c) => {
   const tags = (formData.get('tags') as string || '').trim();
   let filename = (formData.get('filename') as string || '').trim();
   if (filename) filename = sanitizeFilename(filename);
-  // forever/null 表示永久
+  // 上传到 Telegram
   try {
     const response = await fetch(
       `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendPhoto`,
@@ -77,11 +72,23 @@ app.post('/api/upload', async (c) => {
     );
     if (!response.ok) {
       const errorDetails = await response.text();
-      console.error('Telegram API错误:', errorDetails);
+      let errorMsg = 'Telegram API调用失败';
+      try {
+        const errorJson = JSON.parse(errorDetails);
+        if (errorJson && typeof errorJson === 'object') {
+          if (errorJson.description) errorMsg += `: ${errorJson.description}`;
+          console.error(`Telegram API错误: status_code=${response.status}, description=${errorJson.description || ''}`);
+        } else {
+          console.error(`Telegram API错误: status_code=${response.status}, body=${errorDetails}`);
+        }
+      } catch {
+        console.error(`Telegram API错误: status_code=${response.status}, body=${errorDetails}`);
+      }
       return c.json({
         status: 'error',
-        message: 'Telegram API调用失败',
-        details: errorDetails
+        message: errorMsg,
+        details: errorDetails,
+        status_code: response.status
       }, { status: 500 });
     }
     const res: {
@@ -102,13 +109,13 @@ app.post('/api/upload', async (c) => {
         tryCount++;
         if (tryCount > 5) throw new Error('短码生成失败，请重试');
       }
-      // 保存记录到数据库
+      // 保存记录到数据库（不再存 hash 字段）
       try {
         const size = photoFile.size;
         const stmt = DB.prepare(
-          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename, size, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)' 
+          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename, size) VALUES (?, ?, ?, ?, ?, ?, ?)' 
         );
-        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size, hash).run();
+        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size).run();
         if (!dbResult.success) {
             throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
         }
@@ -129,6 +136,23 @@ app.post('/api/upload', async (c) => {
       return c.json({ status: 'error', message: res.description || '上传失败' });
     }
   } catch (error: unknown) {
+    // 检查 Cloudflare Worker 超时报错
+    let isCpuTimeout = false;
+    let errorMsg = '服务器错误';
+    if (error && typeof error === 'object') {
+      const msg = (error as any).message || '';
+      if (msg.includes('Worker exceeded CPU time limit')) {
+        isCpuTimeout = true;
+        errorMsg = 'Cloudflare Worker 执行超时，请稍后重试或优化图片大小。';
+      }
+    }
+    if (!isCpuTimeout && typeof error === 'string' && error.includes('Worker exceeded CPU time limit')) {
+      isCpuTimeout = true;
+      errorMsg = 'Cloudflare Worker 执行超时，请稍后重试或优化图片大小。';
+    }
+    if (isCpuTimeout) {
+      return c.json({ status: 'error', message: errorMsg }, { status: 504 });
+    }
     console.error(error);
     return c.json({ status: 'error', message: '服务器错误' }, { status: 500 });
   }
@@ -193,8 +217,6 @@ app.get('/img/:short_code', async (c) => {
   if (row.expire_at && new Date(String(row.expire_at)).getTime() < Date.now()) {
     return c.text('链接已过期', 410);
   }
-  // 访问计数+1
-  // 删除访问日志
   // 返回原图
   const TG_BOT_TOKEN = c.env.TG_BOT_TOKEN;
   const getFileResponse = await fetch(
@@ -207,10 +229,11 @@ app.get('/img/:short_code', async (c) => {
       `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`
     );
     const imageRes = await imageResponse.arrayBuffer();
+    const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
     return new Response(imageRes, {
       status: 200,
       headers: {
-        'Content-Type': 'image/png',
+        'Content-Type': contentType,
         'Cache-Control': 'public, max-age=31536000'
       },
     });

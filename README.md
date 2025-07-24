@@ -67,7 +67,6 @@
      filename TEXT,
      size INTEGER,
      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-     hash TEXT
    );
    ```
 

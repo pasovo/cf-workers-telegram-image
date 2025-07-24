@@ -710,7 +710,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     const concurrency = 6; // 并发数
     let finished = 0;
     const total = allImages.length;
-    const tasks = allImages.map((img, idx) => async () => {
+    const tasks = allImages.map((img) => async () => {
       try {
         const resp = await fetch(`/api/get_photo/${img.file_id}`, { credentials: 'include' });
         if (!resp.ok) return;

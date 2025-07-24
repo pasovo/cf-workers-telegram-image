@@ -27,7 +27,13 @@ function App() {
   const [isAuthed, setIsAuthed] = React.useState(false);
 
   React.useEffect(() => {
-    fetch('/api/settings', { credentials: 'include' })
+    const token = localStorage.getItem('jwt_token');
+    if (!token) {
+      setAuthChecked(true);
+      setIsAuthed(false);
+      return;
+    }
+    fetchWithAuth('/api/settings')
       .then(res => {
         if (res.status === 401) setIsAuthed(false);
         else setIsAuthed(true);
@@ -143,7 +149,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       if (filenameVal) params.append('filename', filenameVal);
       params.append('page', String(pageNum));
       params.append('limit', String(LIMIT));
-      const response = await fetch(`/api/history?${params.toString()}`, { credentials: 'include' });
+      const response = await fetchWithAuth(`/api/history?${params.toString()}`);
       if (!response.ok) throw new Error('获取历史记录失败');
       const data = await response.json();
       if (data.status === 'success') {
@@ -447,10 +453,10 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     setToast({ message: '已提交删除', type: 'info' });
     // 后台异步删除
     try {
-      const res = await fetch('/api/delete', {
+      const token = localStorage.getItem('jwt_token') || '';
+      const res = await fetchWithAuth('/api/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ ids: selected })
       });
       const data = await res.json();
@@ -489,7 +495,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const fetchStats = async () => {
     if (!isAuthed) return;
     try {
-      const res = await fetch('/api/stats', { credentials: 'include' });
+      const res = await fetchWithAuth('/api/stats');
       const data = await res.json();
       if (data.status === 'success') setStats(data);
     } catch (err) {}
@@ -500,7 +506,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const fetchSettings = async () => {
     if (!isAuthed) return;
     try {
-      const res = await fetch('/api/settings', { credentials: 'include' });
+      const res = await fetchWithAuth('/api/settings');
       const data = await res.json();
       if (data.status === 'success') setSettings(data);
     } catch {}
@@ -517,7 +523,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     };
     img.src = `/api/get_photo/${modalItem.file_id}`;
     // 获取大小
-    fetch(`/api/get_photo/${modalItem.file_id}`, { credentials: 'include' })
+    fetchWithAuth(`/api/get_photo/${modalItem.file_id}`)
       .then(res => {
         const size = Number(res.headers.get('content-length')) || 0;
         setImgInfo(prev => ({ ...prev, size }));
@@ -538,11 +544,11 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ username: loginUser, password: loginPass })
       });
       const data = await res.json();
-      if (res.ok && data.status === 'success') {
+      if (res.ok && data.status === 'success' && data.token) {
+        localStorage.setItem('jwt_token', data.token);
         setIsAuthed(true);
         setLoginUser('');
         setLoginPass('');
@@ -559,10 +565,11 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
 
   // 登出方法
   const handleLogout = async () => {
-    await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+    localStorage.removeItem('jwt_token');
+    await fetchWithAuth('/api/logout', { method: 'POST' });
     setIsAuthed(false);
     setToast({ message: '已退出登录', type: 'info' });
-    window.location.reload(); // 强制刷新页面，确保 cookie 失效后重新鉴权
+    window.location.reload(); // 强制刷新页面，确保退出
   };
 
   // 未登录时渲染登录界面
@@ -693,7 +700,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     let page = 1, hasMore = true;
     const pageSize = 100;
     while (hasMore) {
-      const res = await fetch(`/api/history?page=${page}&limit=${pageSize}`, { credentials: 'include' });
+      const res = await fetchWithAuth(`/api/history?page=${page}&limit=${pageSize}`);
       const data = await res.json();
       if (data.status === 'success') {
         allImages = allImages.concat(data.data as ImageItem[]);
@@ -713,7 +720,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     const total = allImages.length;
     const tasks = allImages.map((img) => async () => {
       try {
-        const resp = await fetch(`/api/get_photo/${img.file_id}`, { credentials: 'include' });
+        const resp = await fetchWithAuth(`/api/get_photo/${img.file_id}`);
         if (!resp.ok) return;
         const buf = await resp.arrayBuffer();
         const hash = await calcFileHash(new File([buf], img.filename || img.file_id));
@@ -747,10 +754,9 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       return;
     }
     // 4. 批量删除
-    const res = await fetch('/api/delete', {
+    const res = await fetchWithAuth('/api/delete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('jwt_token') || ''}` },
       body: JSON.stringify({ ids: toDelete })
     });
     const data = await res.json();
@@ -1037,15 +1043,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 <h2 className="text-lg font-bold mb-4 text-cyan-400">系统设置</h2>
                 {settings ? (
                   <div className="space-y-6">
-                    <div>
-                      <div className="text-sm text-gray-300 font-bold mb-1">上传总数</div>
-                      <div className="flex items-center">
+                    <div className="flex gap-12 mb-2">
+                      <div className="flex flex-col items-center flex-1">
+                        <div className="text-sm text-gray-300 font-bold mb-1">上传总数</div>
                         <span className="text-2xl font-bold text-cyan-400">{stats.total}</span>
                       </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-300 font-bold mb-1">空间占用</div>
-                      <div className="flex items-center">
+                      <div className="flex flex-col items-center flex-1">
+                        <div className="text-sm text-gray-300 font-bold mb-1">空间占用</div>
                         <span className="text-2xl font-bold text-cyan-400">{(stats.size / 1024 / 1024).toFixed(2)} MB</span>
                       </div>
                     </div>
@@ -1210,6 +1214,19 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       </div>
     </div>
   );
+}
+
+// fetch工具函数，自动处理token续期
+async function fetchWithAuth(url: string, options: any = {}) {
+  const token = localStorage.getItem('jwt_token') || '';
+  options.headers = options.headers || {};
+  options.headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(url, options);
+  const refreshedToken = res.headers.get('X-Refreshed-Token');
+  if (refreshedToken) {
+    localStorage.setItem('jwt_token', refreshedToken);
+  }
+  return res;
 }
 
 export default App;

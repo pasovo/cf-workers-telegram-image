@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
-import { v4 as uuidv4 } from 'uuid';
+import { sign, verify } from 'hono/jwt';
 
 type Bindings = {
   TG_BOT_TOKEN: string;
@@ -8,6 +8,7 @@ type Bindings = {
   DB: D1Database; // 添加D1数据库类型
   ADMIN_USER: string;
   ADMIN_PASS: string;
+  JWT_SECRET: string; // 新增JWT密钥
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -296,8 +297,8 @@ app.get('/api/stats', async (c) => {
 // 设置API
 app.get('/api/settings', async (c) => {
   // 鉴权
-  const token = getAuthToken(c);
-  if (!token || !globalAuthToken || token !== globalAuthToken) {
+  const token = getJwtToken(c);
+  if (!token) {
     return c.json({ status: 'error', message: '未登录' }, { status: 401 });
   }
   const DB = c.env.DB;
@@ -332,8 +333,8 @@ app.get('/api/test-db', async (c) => {
 // 3. 定期去重 API（仅管理员可用），保留最后一条
 app.post('/api/deduplicate', async (c) => {
   // 简单鉴权
-  const token = getAuthToken(c);
-  if (!token || !globalAuthToken || token !== globalAuthToken) {
+  const token = getJwtToken(c);
+  if (!token) {
     return c.json({ status: 'error', message: '未登录' }, { status: 401 });
   }
   const DB = c.env.DB;
@@ -357,52 +358,54 @@ app.post('/api/deduplicate', async (c) => {
   return c.json({ status: 'success', deleted, duplicates });
 });
 
-let globalAuthToken: string | null = null;
 
-function getAuthToken(c: any) {
-  const cookie = c.req.header('cookie') || '';
-  const match = cookie.match(/auth_token=([^;]+)/);
+// 获取JWT
+function getJwtToken(c: any) {
+  const auth = c.req.header('authorization') || '';
+  const match = auth.match(/^Bearer (.+)$/i);
   return match ? match[1] : '';
-}
-
-function setAuthCookie(token: string) {
-  // 7天有效期
-  return `auth_token=${token}; Path=/; HttpOnly; Max-Age=604800; SameSite=Strict`;
 }
 
 // 登录接口
 app.post('/api/login', async (c) => {
   const { username, password } = await c.req.json();
+  const JWT_SECRET = c.env.JWT_SECRET;
   if (username === c.env.ADMIN_USER && password === c.env.ADMIN_PASS) {
-    // 生成随机 token
-    const token = uuidv4();
-    globalAuthToken = token;
-    return c.json({ status: 'success' }, {
-      headers: { 'Set-Cookie': setAuthCookie(token) }
-    });
+    // 生成带7天过期的JWT
+    const now = Math.floor(Date.now() / 1000);
+    const exp = now + 7 * 24 * 60 * 60;
+    const token = await sign({ user: username, exp }, JWT_SECRET, 'HS256');
+    return c.json({ status: 'success', token });
   }
   return c.json({ status: 'error', message: '用户名或密码错误' }, { status: 401 });
 });
 
-// 登出接口
+// 登出接口（前端只需删除本地token即可，这里保留接口返回成功）
 app.post('/api/logout', async (c) => {
-  globalAuthToken = null;
-  return c.json({ status: 'success' }, {
-    headers: { 'Set-Cookie': 'auth_token=; Path=/; HttpOnly; Max-Age=0; SameSite=Strict' }
-  });
+  return c.json({ status: 'success' });
 });
 
 // 需要登录的API统一校验
 app.use('/api/', async (c, next) => {
-  // 允许 /api/login /api/logout /api/settings 不校验
+  // 允许 /api/login /api/logout 不校验
   const url = c.req.url;
-  if (url.includes('/api/login') || url.includes('/api/logout') || url.includes('/api/settings')) return await next();
-  const token = getAuthToken(c);
-  if (!token || !globalAuthToken || token !== globalAuthToken) {
+  if (url.includes('/api/login') || url.includes('/api/logout')) return await next();
+  const token = getJwtToken(c);
+  const JWT_SECRET = c.env.JWT_SECRET;
+  if (!token) return c.json({ status: 'error', message: '未登录' }, { status: 401 });
+  try {
+    const payload = await verify(token, JWT_SECRET, 'HS256');
+    c.set('jwtPayload', payload);
+    // 自动续期：如果剩余时间 < 1天，生成新token
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp - now < 24 * 60 * 60) {
+      const newExp = now + 7 * 24 * 60 * 60;
+      const newToken = await sign({ user: payload.user, exp: newExp }, JWT_SECRET, 'HS256');
+      c.header('X-Refreshed-Token', newToken);
+    }
+  } catch {
     return c.json({ status: 'error', message: '未登录' }, { status: 401 });
   }
-  // 刷新cookie时效
-  c.header('Set-Cookie', setAuthCookie(token));
   await next();
 });
 

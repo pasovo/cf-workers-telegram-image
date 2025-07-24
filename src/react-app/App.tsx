@@ -788,7 +788,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       <div className="container mx-auto max-w-4xl px-2 sm:px-4 py-8">
         <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
         {/* 统计区块，仅在上传/图库页显示 */}
-        {(tab==='upload'||tab==='gallery') && (
+        {(tab==='upload'||tab==='gallery') && false && (
           <div className="flex gap-8 mb-8">
             <div className="card flex-1 flex flex-col items-center">
               <span className="text-2xl font-bold text-cyan-400">{stats.total}</span>
@@ -1036,6 +1036,18 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 <h2 className="text-lg font-bold mb-4 text-cyan-400">系统设置</h2>
                 {settings ? (
                   <div className="space-y-6">
+                    <div>
+                      <div className="text-sm text-gray-300 font-bold mb-1">上传总数</div>
+                      <div className="flex items-center">
+                        <span className="text-2xl font-bold text-cyan-400">{stats.total}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-300 font-bold mb-1">空间占用</div>
+                      <div className="flex items-center">
+                        <span className="text-2xl font-bold text-cyan-400">{(stats.size / 1024 / 1024).toFixed(2)} MB</span>
+                      </div>
+                    </div>
                     <div>
                       <div className="text-sm text-gray-300 font-bold mb-1">页面标题</div>
                       <div className="flex items-center">

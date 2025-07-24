@@ -234,7 +234,7 @@ app.get('/img/:short_code', async (c) => {
   const { short_code } = c.req.param();
   const { DB } = c.env;
   // 查找短码
-  const row = await DB.prepare('SELECT file_id, expire_at FROM images WHERE short_code = ?').bind(short_code).first();
+  const row = await DB.prepare('SELECT file_id, expire_at, content_type FROM images WHERE short_code = ?').bind(short_code).first();
   if (!row) {
     return c.text('链接不存在', 404);
   }
@@ -253,7 +253,7 @@ app.get('/img/:short_code', async (c) => {
       `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`
     );
     const imageRes = await imageResponse.arrayBuffer();
-    const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+    const contentType = typeof row.content_type === 'string' ? row.content_type : 'image/jpeg';
     return new Response(imageRes, {
       status: 200,
       headers: {

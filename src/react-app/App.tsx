@@ -547,6 +547,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         setLoginUser('');
         setLoginPass('');
         setLoginError('');
+        window.location.reload(); // 登录成功后强制刷新页面
       } else {
         setLoginError(data.message || '登录失败');
       }

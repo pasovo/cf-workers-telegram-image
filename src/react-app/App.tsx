@@ -439,31 +439,49 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     formData.append('tags', tagsToUpload.join(','));
     formData.append('filename', uploadFile.name);
     // 不再传 hash 字段
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/upload');
-      xhr.onload = () => {
-        try {
-          const res = JSON.parse(xhr.responseText);
-          if (xhr.status === 200 && res.status === 'success') {
-            setToast({ message: '图片上传成功', type: 'success' });
-            fetchStats(); // 上传后刷新统计
-            resolve();
-          } else {
-            setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
-            reject(new Error(res.message || '上传失败'));
-          }
-        } catch (err) {
-          setToast({ message: '上传失败，服务器响应异常', type: 'error' });
-          reject(err);
-        }
-      };
-      xhr.onerror = () => {
-        setToast({ message: '上传失败，请重试', type: 'error' });
-        reject(new Error('上传失败'));
-      };
-      xhr.send(formData);
-    });
+    let retry = 0;
+    while (retry < 3) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/upload');
+          xhr.onload = () => {
+            try {
+              const res = JSON.parse(xhr.responseText);
+              if (xhr.status === 200 && res.status === 'success') {
+                setToast({ message: '图片上传成功', type: 'success' });
+                fetchStats(); // 上传后刷新统计
+                resolve();
+              } else {
+                // 检查是否是 Too Many Requests
+                const match = /Too Many Requests: retry after (\d+)/.exec(res.message || '');
+                if (match) {
+                  const waitSec = parseInt(match[1], 10);
+                  setToast({ message: `限流，等待${waitSec}秒后重试...`, type: 'error' });
+                  setTimeout(() => { retry++; resolve(); }, waitSec * 1000);
+                  return;
+                }
+                setToast({ message: `上传失败: ${res.message || '未知错误'}`, type: 'error' });
+                reject(new Error(res.message || '上传失败'));
+              }
+            } catch (err) {
+              setToast({ message: '上传失败，服务器响应异常', type: 'error' });
+              reject(err);
+            }
+          };
+          xhr.onerror = () => {
+            setToast({ message: '上传失败，请重试', type: 'error' });
+            reject(new Error('上传失败'));
+          };
+          xhr.send(formData);
+        });
+        break; // 成功或非限流错误时跳出循环
+      } catch (err) {
+        if (retry >= 3) throw err;
+        // 其它错误直接抛出
+        throw err;
+      }
+    }
   };
 
   // 3. 优化 handleUploadAll，上传全部完成后只刷新一次图片列表
@@ -736,6 +754,46 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     }} />
   );
 
+  // ProgressiveImage 组件：支持 onLoad/onError 回调
+  function ProgressiveImage({ file_id, alt, className, style, onLoad, onError }: {
+    file_id: string,
+    alt?: string,
+    className?: string,
+    style?: React.CSSProperties,
+    onLoad?: (e: React.SyntheticEvent<HTMLImageElement, Event>) => void,
+    onError?: (e: React.SyntheticEvent<HTMLImageElement, Event>) => void
+  }) {
+    const [src, setSrc] = React.useState(`/api/get_photo/${file_id}?thumb=1`);
+    const loadedRef = React.useRef(false);
+    React.useEffect(() => {
+      loadedRef.current = false;
+      setSrc(`/api/get_photo/${file_id}?thumb=1`);
+      const img = new window.Image();
+      img.src = `/api/get_photo/${file_id}`;
+      img.onload = () => {
+        if (!loadedRef.current) {
+          setSrc(`/api/get_photo/${file_id}`);
+          loadedRef.current = true;
+        }
+      };
+      return () => { loadedRef.current = true; };
+    }, [file_id]);
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className={className}
+        style={style}
+        loading="lazy"
+        onLoad={onLoad}
+        onError={e => {
+          if (onError) onError(e);
+          (e.currentTarget as HTMLImageElement).src = 'https://via.placeholder.com/200?text=加载失败';
+        }}
+      />
+    );
+  }
+
   // MasonryList渲染函数
   const renderMasonryItem = (img: any) => {
     if (img.skeleton) return <SkeletonItem />;
@@ -762,12 +820,10 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
           }
         }}
       >
-        <img
-          src={`/api/get_photo/${img.file_id}?thumb=1`}
+        <ProgressiveImage
+          file_id={img.file_id}
           alt={img.filename || img.file_id}
           style={{ width: '100%', display: 'block', borderRadius: 12, maxHeight: 320, objectFit: 'cover' }}
-          loading="lazy"
-          onError={e => (e.currentTarget.src = 'https://via.placeholder.com/200?text=加载失败')}
         />
         {isSelected && (
           <div style={{
@@ -1392,10 +1448,9 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   <span className="text-red-400">图片加载失败</span>
                 </div>
               )}
-              <img
-                src={`/api/get_photo/${modalItem.file_id}?thumb=1`}
+              <ProgressiveImage
+                file_id={modalItem.file_id}
                 alt="大图"
-                loading="lazy"
                 className="w-full rounded mb-4 bg-[#232b36]"
                 style={{maxHeight: 320, objectFit: 'contain', opacity: imgInfo.width ? 1 : 0, transition: 'opacity 0.3s'}}
                 onLoad={e => {
@@ -1406,7 +1461,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 }}
                 onError={e => {
                   setImgInfo(prev => ({ ...prev, size: -1 }));
-                  e.currentTarget.src = 'https://via.placeholder.com/400x300?text=加载失败';
                 }}
               />
             </div>

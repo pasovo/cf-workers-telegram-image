@@ -219,15 +219,12 @@ app.post('/api/delete', async (c) => {
   if (!Array.isArray(ids) || ids.length === 0) {
     return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
   }
-  await DB.exec('BEGIN TRANSACTION');
   try {
-    for (const id of ids) {
-      await DB.prepare('DELETE FROM images WHERE file_id = ?').bind(id).run();
-    }
-    await DB.exec('COMMIT');
+    // 用 D1 batch API 批量删除
+    const stmts = ids.map(id => DB.prepare('DELETE FROM images WHERE file_id = ?').bind(id));
+    await DB.batch(stmts);
     return c.json({ status: 'success' });
   } catch (error) {
-    await DB.exec('ROLLBACK');
     return c.json({ status: 'error', message: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 });
@@ -447,7 +444,7 @@ app.put('/api/folders', async (c) => {
   return c.json({ status: 'success' });
 });
 
-// 批量移动图片（加事务）
+// 批量移动图片（用 D1 batch API）
 app.post('/api/move_images', async (c) => {
   const { ids, target_folder } = await c.req.json();
   const { DB } = c.env;
@@ -463,19 +460,15 @@ app.post('/api/move_images', async (c) => {
       return c.json({ status: 'error', message: '文件夹名仅允许中英文、数字、下划线' }, { status: 400 });
     }
   }
-  await DB.exec('BEGIN TRANSACTION');
   try {
-    for (const id of ids) {
-      await DB.prepare('UPDATE images SET folder = ? WHERE file_id = ?').bind(folder, id).run();
-    }
-    await DB.exec('COMMIT');
+    const stmts = ids.map(id => DB.prepare('UPDATE images SET folder = ? WHERE file_id = ?').bind(folder, id));
+    await DB.batch(stmts);
     return c.json({ status: 'success' });
   } catch (e) {
-    await DB.exec('ROLLBACK');
     return c.json({ status: 'error', message: '批量移动失败' });
   }
 });
-// 批量复制图片（加事务）
+// 批量复制图片（用 D1 batch API）
 app.post('/api/copy_images', async (c) => {
   const { ids, target_folder } = await c.req.json();
   const { DB, TG_CHAT_ID } = c.env;
@@ -491,8 +484,8 @@ app.post('/api/copy_images', async (c) => {
       return c.json({ status: 'error', message: '文件夹名仅允许中英文、数字、下划线' }, { status: 400 });
     }
   }
-  await DB.exec('BEGIN TRANSACTION');
   try {
+    const stmts = [];
     for (const id of ids) {
       const row = await DB.prepare('SELECT * FROM images WHERE file_id = ?').bind(id).first();
       if (!row) continue;
@@ -506,16 +499,15 @@ app.post('/api/copy_images', async (c) => {
         tryCount++;
         if (tryCount > 5) throw new Error('短码生成失败，请重试');
       }
-      await DB.prepare(
+      stmts.push(DB.prepare(
         'INSERT INTO images (file_id, thumb_file_id, chat_id, short_code, expire_at, tags, filename, size, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).bind(
         row.file_id, row.thumb_file_id, TG_CHAT_ID, short_code, row.expire_at, row.tags, row.filename, row.size, folder
-      ).run();
+      ));
     }
-    await DB.exec('COMMIT');
+    await DB.batch(stmts);
     return c.json({ status: 'success' });
   } catch (e) {
-    await DB.exec('ROLLBACK');
     return c.json({ status: 'error', message: '批量复制失败' });
   }
 });

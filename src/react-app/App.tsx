@@ -831,27 +831,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                       ref={fileInputRef}
                     />
                   </label>
-                  {files.length > 0 && (
-                    <div className="w-full flex flex-wrap gap-2 mt-2">
-                      {files.slice(0, 30).map((file, idx) => (
-                        <div key={idx} className={`relative flex flex-col items-center border rounded p-2 bg-[#232b36] ${selected.includes(file.name) ? 'ring-2 ring-cyan-400 border-cyan-400' : ''}`}>
-                          <button
-                            className="absolute -top-2 -right-2 w-6 h-6 bg-[#232b36] text-gray-400 hover:text-red-400 rounded-full flex items-center justify-center shadow"
-                            type="button"
-                            title="移除"
-                            onClick={() => handleRemoveFile(idx)}
-                          >×</button>
-                          <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" onClick={() => setSelected([...selected, file.name])} />
-                          <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
-                          {uploadingIdx.includes(idx) && <span className="text-xs text-blue-400 mt-1">上传中...</span>}
-                          {failedIdx.includes(idx) && <span className="text-xs text-red-400 mt-1">失败</span>}
-                        </div>
-                      ))}
-                      {files.length > 30 && (
-                        <div className="flex items-center justify-center w-16 h-16 bg-[#232b36] rounded text-cyan-400 text-lg font-bold">+{files.length - 30}</div>
-                      )}
-                    </div>
-                  )}
                 </div>
                 {/* 标签输入 */}
                 <div className="flex items-center gap-2 flex-wrap">
@@ -913,6 +892,27 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                       />
                     </div>
                     <div className="text-xs text-gray-400 mt-1 text-center">{totalProgress}%（{totalProgress === 100 ? '全部完成' : '上传中...'}）</div>
+                  </div>
+                )}
+                {files.length > 0 && (
+                  <div className="w-full flex flex-wrap gap-2 mt-2">
+                    {files.slice(0, 30).map((file, idx) => (
+                      <div key={idx} className={`relative flex flex-col items-center border rounded p-2 bg-[#232b36] ${selected.includes(file.name) ? 'ring-2 ring-cyan-400 border-cyan-400' : ''}`}>
+                        <button
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-[#232b36] text-gray-400 hover:text-red-400 rounded-full flex items-center justify-center shadow"
+                          type="button"
+                          title="移除"
+                          onClick={() => handleRemoveFile(idx)}
+                        >×</button>
+                        <img src={URL.createObjectURL(file)} alt="预览" className="w-16 h-16 object-cover rounded mb-1" onClick={() => setSelected([...selected, file.name])} />
+                        <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
+                        {uploadingIdx.includes(idx) && <span className="text-xs text-blue-400 mt-1">上传中...</span>}
+                        {failedIdx.includes(idx) && <span className="text-xs text-red-400 mt-1">失败</span>}
+                      </div>
+                    ))}
+                    {files.length > 30 && (
+                      <div className="flex items-center justify-center w-16 h-16 bg-[#232b36] rounded text-cyan-400 text-lg font-bold">+{files.length - 30}</div>
+                    )}
                   </div>
                 )}
                 <div className="pt-2">

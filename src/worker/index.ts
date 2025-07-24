@@ -28,6 +28,11 @@ function genShortCode(length = 7) {
   return code;
 }
 
+// 工具函数：校验文件夹名
+function isValidFolderName(name: string) {
+  return /^[\u4e00-\u9fa5a-zA-Z0-9_]+$/.test(name);
+}
+
 // 获取域名配置
 function getBaseUrl(env: any, req: any) {
   // 优先用环境变量 SHORTLINK_DOMAIN，否则用请求头
@@ -36,7 +41,7 @@ function getBaseUrl(env: any, req: any) {
   return env.SHORTLINK_DOMAIN || (host ? `${proto}://${host}` : '');
 }
 
-// 上传图片处理（支持有效期、短链、标签、文件名、统计）
+// 上传图片处理，支持 folder 字段
 app.post('/api/upload', async (c) => {
   const { TG_BOT_TOKEN, TG_CHAT_ID, DB } = c.env;
   if (!TG_BOT_TOKEN || !TG_CHAT_ID) {
@@ -65,6 +70,16 @@ app.post('/api/upload', async (c) => {
   const tags = (formData.get('tags') as string || '').trim();
   let filename = (formData.get('filename') as string || '').trim();
   if (filename) filename = sanitizeFilename(filename);
+  let folder = (formData.get('folder') as string || '/').trim();
+  if (!folder.startsWith('/')) folder = '/' + folder;
+  if (!folder.endsWith('/')) folder += '/';
+  // 校验每一级文件夹名
+  const parts = folder.split('/').filter(Boolean);
+  for (const part of parts) {
+    if (!isValidFolderName(part)) {
+      return c.json({ status: 'error', message: '文件夹名仅允许中英文、数字、下划线' }, { status: 400 });
+    }
+  }
   // 上传到 Telegram
   try {
     const response = await fetch(
@@ -99,7 +114,8 @@ app.post('/api/upload', async (c) => {
     } = await response.json();
     if (res.ok && res.result?.photo && res.result.photo.length > 0) {
       const photo = res.result.photo;
-      const file_id = photo[photo.length - 1].file_id;
+      const file_id = String(photo[photo.length - 1]?.file_id || ''); // 原图
+      const thumb_file_id = String(photo[0]?.file_id || ''); // 最小缩略图
       // 生成唯一短码
       let short_code = '';
       let tryCount = 0;
@@ -110,13 +126,13 @@ app.post('/api/upload', async (c) => {
         tryCount++;
         if (tryCount > 5) throw new Error('短码生成失败，请重试');
       }
-      // 保存记录到数据库（不再存 hash 字段）
+      // 保存记录到数据库（增加folder字段）
       try {
         const size = photoFile.size;
         const stmt = DB.prepare(
-          'INSERT INTO images (file_id, chat_id, short_code, expire_at, tags, filename, size) VALUES (?, ?, ?, ?, ?, ?, ?)' 
+          'INSERT INTO images (file_id, thumb_file_id, chat_id, short_code, expire_at, tags, filename, size, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)' 
         );
-        const dbResult = await stmt.bind(file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size).run();
+        const dbResult = await stmt.bind(file_id, thumb_file_id, TG_CHAT_ID, short_code, expire_at, tags, filename, size, folder).run();
         if (!dbResult.success) {
             throw new Error(`数据库插入失败: ${JSON.stringify(dbResult.error)}`);
         }
@@ -160,9 +176,19 @@ app.post('/api/upload', async (c) => {
 });
 // /api/get_photo/:file_id 支持缩略图
 app.get('/api/get_photo/:file_id', async (c) => {
-  const { TG_BOT_TOKEN } = c.env;
-  const file_id = c.req.param('file_id');
+  const { TG_BOT_TOKEN, DB } = c.env;
+  let file_id = c.req.param('file_id');
   const isThumb = c.req.query('thumb') === '1';
+  // 查找file_id和thumb_file_id
+  const row = await DB.prepare('SELECT file_id, thumb_file_id FROM images WHERE file_id = ? OR thumb_file_id = ?').bind(file_id, file_id).first();
+  if (!row) {
+    return c.json({ status: 'error', message: '图片不存在' }, { status: 404 });
+  }
+  if (isThumb && row.thumb_file_id) {
+    file_id = String(row.thumb_file_id);
+  } else {
+    file_id = String(row.file_id);
+  }
   // 获取 file_path
   const getFileResponse = await fetch(
     `https://api.telegram.org/bot${TG_BOT_TOKEN}/getFile?file_id=${file_id}`
@@ -170,24 +196,20 @@ app.get('/api/get_photo/:file_id', async (c) => {
   const getFileRes: any = await getFileResponse.json();
   if (getFileRes.ok) {
     const file_path = getFileRes.result.file_path;
-    let url = `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`;
-    if (isThumb) {
-      // Telegram 缩略图接口（需实际测试，部分图片可能无缩略图）
-      url += '?thumb=1';
-    }
-    const imageResponse = await fetch(url);
+    const imageResponse = await fetch(
+      `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${file_path}`
+    );
     const imageRes = await imageResponse.arrayBuffer();
+    const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
     return new Response(imageRes, {
       status: 200,
       headers: {
-        'Content-Type': 'image/png',
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=31536000'
       },
     });
   } else {
-    return c.json({
-      status: 'error',
-      message: '获取文件失败',
-    });
+    return c.json({ status: 'error', message: '获取文件失败' });
   }
 });
 // 批量删除接口
@@ -243,12 +265,12 @@ app.get('/img/:short_code', async (c) => {
   }
 });
 
-// 新增：获取历史记录API
+// 获取图片API，支持 folder 参数，返回当前文件夹下图片和子文件夹
 app.get('/api/history', async (c) => {
   try {
-    const { page = '1', limit = '20', search = '', tag = '', filename = '' } = c.req.query();
+    const { page = '1', limit = '50', search = '', tag = '', filename = '', folder = '/' } = c.req.query();
     const pageNum = parseInt(page, 10) || 1;
-    const limitNum = parseInt(limit, 10) || 20;
+    const limitNum = parseInt(limit, 10) || 50;
     const offset = (pageNum - 1) * limitNum;
     let sql = 'SELECT * FROM images WHERE 1=1';
     const params: any[] = [];
@@ -264,22 +286,42 @@ app.get('/api/history', async (c) => {
       sql += ' AND filename LIKE ?';
       params.push(`%${filename}%`);
     }
+    if (folder) {
+      sql += ' AND folder = ?';
+      params.push(folder);
+    }
     sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(limitNum, offset);
     const { results } = await c.env.DB.prepare(sql).bind(...params).all();
+    // 获取当前文件夹下的所有子文件夹
+    const folderSql = 'SELECT DISTINCT folder FROM images WHERE folder LIKE ?';
+    const folderLike = folder === '/' ? '/%' : folder + '%';
+    const allFolders = await c.env.DB.prepare(folderSql).bind(folderLike).all();
+    // 只保留当前层级的子文件夹
+    const subFolders = Array.from(new Set(
+      allFolders.results
+        .map((row: any) => row.folder)
+        .filter((f: string) => f.startsWith(folder) && f !== folder)
+        .map((f: string) => {
+          const rest = f.slice(folder.length);
+          return rest.split('/')[0];
+        })
+        .filter(Boolean)
+    ));
+    // 查询总数
+    const totalRow = await c.env.DB.prepare('SELECT COUNT(*) as n FROM images WHERE folder = ?').bind(folder).first();
     return c.json({
       status: 'success',
       data: results,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total: results.length
-      }
+      folders: subFolders,
+      page: pageNum,
+      limit: limitNum,
+      total: totalRow?.n || 0
     });
   } catch (error) {
     return c.json({
       status: 'error',
-      message: error instanceof Error ? error.message : '获取历史记录失败'
+      message: error instanceof Error ? error.message : '获取图片失败'
     }, { status: 500 });
   }
 });
@@ -356,6 +398,102 @@ app.post('/api/deduplicate', async (c) => {
     }
   }
   return c.json({ status: 'success', deleted, duplicates });
+});
+
+// 文件夹增删改查接口
+app.get('/api/folders', async (c) => {
+  // 获取所有文件夹路径
+  const { DB } = c.env;
+  const all = await DB.prepare('SELECT DISTINCT folder FROM images').all();
+  return c.json({ status: 'success', folders: all.results.map((r: any) => r.folder) });
+});
+app.post('/api/folders', async (c) => {
+  // 新建文件夹（仅逻辑，实际只需前端传递folder即可）
+  return c.json({ status: 'success' });
+});
+app.delete('/api/folders', async (c) => {
+  // 删除文件夹及其所有子文件夹和图片
+  const { folder } = await c.req.json();
+  const { DB } = c.env;
+  if (!folder || typeof folder !== 'string') return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
+  // 删除所有以该folder为前缀的图片
+  await DB.prepare('DELETE FROM images WHERE folder = ? OR folder LIKE ?').bind(folder, folder + '%').run();
+  return c.json({ status: 'success' });
+});
+app.put('/api/folders', async (c) => {
+  // 重命名文件夹
+  const { oldFolder, newFolder } = await c.req.json();
+  const { DB } = c.env;
+  if (!oldFolder || !newFolder) return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
+  // 校验新文件夹名
+  const parts = newFolder.split('/').filter(Boolean);
+  for (const part of parts) {
+    if (!isValidFolderName(part)) {
+      return c.json({ status: 'error', message: '文件夹名仅允许中英文、数字、下划线' }, { status: 400 });
+    }
+  }
+  // 批量更新所有子项的 folder 路径
+  await DB.prepare('UPDATE images SET folder = REPLACE(folder, ?, ?) WHERE folder = ? OR folder LIKE ?').bind(oldFolder, newFolder, oldFolder, oldFolder + '%').run();
+  return c.json({ status: 'success' });
+});
+
+// 批量移动图片
+app.post('/api/move_images', async (c) => {
+  const { ids, target_folder } = await c.req.json();
+  const { DB } = c.env;
+  if (!Array.isArray(ids) || ids.length === 0 || typeof target_folder !== 'string') {
+    return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
+  }
+  let folder = target_folder.trim();
+  if (!folder.startsWith('/')) folder = '/' + folder;
+  if (!folder.endsWith('/')) folder += '/';
+  const parts = folder.split('/').filter(Boolean);
+  for (const part of parts) {
+    if (!isValidFolderName(part)) {
+      return c.json({ status: 'error', message: '文件夹名仅允许中英文、数字、下划线' }, { status: 400 });
+    }
+  }
+  for (const id of ids) {
+    await DB.prepare('UPDATE images SET folder = ? WHERE file_id = ?').bind(folder, id).run();
+  }
+  return c.json({ status: 'success' });
+});
+// 批量复制图片
+app.post('/api/copy_images', async (c) => {
+  const { ids, target_folder } = await c.req.json();
+  const { DB, TG_CHAT_ID } = c.env;
+  if (!Array.isArray(ids) || ids.length === 0 || typeof target_folder !== 'string') {
+    return c.json({ status: 'error', message: '参数错误' }, { status: 400 });
+  }
+  let folder = target_folder.trim();
+  if (!folder.startsWith('/')) folder = '/' + folder;
+  if (!folder.endsWith('/')) folder += '/';
+  const parts = folder.split('/').filter(Boolean);
+  for (const part of parts) {
+    if (!isValidFolderName(part)) {
+      return c.json({ status: 'error', message: '文件夹名仅允许中英文、数字、下划线' }, { status: 400 });
+    }
+  }
+  for (const id of ids) {
+    const row = await DB.prepare('SELECT * FROM images WHERE file_id = ?').bind(id).first();
+    if (!row) continue;
+    // 生成新 short_code
+    let short_code = '';
+    let tryCount = 0;
+    while (true) {
+      short_code = genShortCode();
+      const check = await DB.prepare('SELECT 1 FROM images WHERE short_code = ?').bind(short_code).first();
+      if (!check) break;
+      tryCount++;
+      if (tryCount > 5) throw new Error('短码生成失败，请重试');
+    }
+    await DB.prepare(
+      'INSERT INTO images (file_id, thumb_file_id, chat_id, short_code, expire_at, tags, filename, size, folder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      row.file_id, row.thumb_file_id, TG_CHAT_ID, short_code, row.expire_at, row.tags, row.filename, row.size, folder
+    ).run();
+  }
+  return c.json({ status: 'success' });
 });
 
 

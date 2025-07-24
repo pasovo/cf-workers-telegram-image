@@ -130,18 +130,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     }
   }, [pageTitle, faviconUrl]);
 
-  // 1. 新增分页相关状态
+  // 获取图片，支持分页加载更多
+  const LIMIT = 50;
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const LIMIT = 20;
-
-  // 2. fetchHistory支持分页，支持追加
-  const fetchHistory = async (searchVal = '', tagVal = '', filenameVal = '', pageNum = 1, append = false) => {
+  const fetchImages = async (searchVal = '', tagVal = '', filenameVal = '', pageNum = 1, append = false) => {
     if (!isAuthed) return;
-    if (isLoadingMore) return;
-    if (!append) setLoading(true);
-    setIsLoadingMore(true);
+    setLoading(true);
     try {
       const params = new URLSearchParams();
       if (searchVal) params.append('search', searchVal);
@@ -150,7 +145,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       params.append('page', String(pageNum));
       params.append('limit', String(LIMIT));
       const response = await fetchWithAuth(`/api/history?${params.toString()}`);
-      if (!response.ok) throw new Error('获取历史记录失败');
+      if (!response.ok) throw new Error('获取图片失败');
       const data = await response.json();
       if (data.status === 'success') {
         if (append) {
@@ -164,28 +159,31 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
           .flat();
         const uniqueTags = Array.from(new Set(allTags)) as string[];
         setTagOptions(uniqueTags.length > 0 ? uniqueTags : ['默认']);
-        // 判断是否还有更多
-        setHasMore(data.data.length >= LIMIT);
+        setHasMore(data.data.length === LIMIT);
       } else {
-        setToast({ message: data.message || '加载历史记录失败', type: 'error' });
+        setToast({ message: data.message || '加载图片失败', type: 'error' });
       }
     } catch (error) {
-      if (error instanceof Error && !/no such table|not found|not exist|not found/i.test(error.message)) {
-        setToast({ message: '加载历史记录失败，请刷新页面重试', type: 'error' });
-      }
+      setToast({ message: '加载图片失败，请刷新页面重试', type: 'error' });
     } finally {
       setLoading(false);
-      setIsLoadingMore(false);
     }
   };
 
-  // 3. useEffect依赖变化时重置分页
+  // useEffect: 初始化和筛选变化时重置分页
   useEffect(() => {
     if (!isAuthed) return;
     setPage(1);
     setHasMore(true);
-    fetchHistory(search, tagFilter, filenameFilter, 1, false);
+    fetchImages(search, tagFilter, filenameFilter, 1, false);
   }, [isAuthed, search, tagFilter, filenameFilter]);
+
+  // 加载更多按钮事件
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchImages(search, tagFilter, filenameFilter, nextPage, true);
+  };
 
   // 处理文件添加（多选、拖拽、粘贴）
   // 修改 handleAddFiles，自动去重
@@ -401,7 +399,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         // 上传
         await uploadFile(file);
         setUploadingIdx(prev => prev.filter(i => i !== idx));
-        fetchHistory(search, tagFilter, filenameFilter);
+        fetchImages(search, tagFilter, filenameFilter, 1, false);
       } catch {
         setUploadingIdx(prev => prev.filter(i => i !== idx));
         failedIdxLocal.push(idx);
@@ -649,7 +647,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         }}
       >
         <img
-          src={img.url || `/api/get_photo/${img.file_id}?thumb=1`}
+          src={`/api/get_photo/${img.file_id}?thumb=1`}
           alt={img.filename || img.file_id}
           style={{ width: '100%', display: 'block', borderRadius: 12, maxHeight: 320, objectFit: 'cover' }}
           loading="lazy"
@@ -763,7 +761,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     setDedupProgress(0);
     if (data.status === 'success') {
       setToast({ message: `去重完成，删除了${toDelete.length}条重复图片`, type: 'success' });
-      fetchHistory();
+      fetchImages(search, tagFilter, filenameFilter, 1, false);
     } else {
       setToast({ message: '去重失败', type: 'error' });
     }
@@ -771,6 +769,52 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
 
   // 新增dedupProgress状态
   const [dedupProgress, setDedupProgress] = useState(0);
+
+  // 待上传图片缓存机制
+  useEffect(() => {
+    // 保存到localStorage
+    if (files.length > 0) {
+      const cache = files.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type,
+        lastModified: f.lastModified,
+        data: ''
+      }));
+      // 读取文件内容为base64
+      Promise.all(files.map(f => new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target?.result || '');
+        reader.readAsDataURL(f);
+      }))).then(datas => {
+        for (let i = 0; i < cache.length; i++) cache[i].data = datas[i] as string;
+        localStorage.setItem('upload_files_cache', JSON.stringify(cache));
+      });
+    } else {
+      localStorage.removeItem('upload_files_cache');
+    }
+  }, [files]);
+
+  useEffect(() => {
+    // 页面加载时恢复缓存
+    if (files.length === 0) {
+      const cacheStr = localStorage.getItem('upload_files_cache');
+      if (cacheStr) {
+        try {
+          const cache = JSON.parse(cacheStr);
+          if (Array.isArray(cache) && cache.length > 0) {
+            const restored = cache.map((item: any) => {
+              const arr = atob(item.data.split(',')[1]);
+              const u8arr = new Uint8Array(arr.length);
+              for (let i = 0; i < arr.length; i++) u8arr[i] = arr.charCodeAt(i);
+              return new File([u8arr], item.name, { type: item.type, lastModified: item.lastModified });
+            });
+            setFiles(restored);
+          }
+        } catch {}
+      }
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#10151b]">
@@ -901,6 +945,21 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     <div className="text-xs text-gray-400 mt-1 text-center">{totalProgress}%（{totalProgress === 100 ? '全部完成' : '上传中...'}）</div>
                   </div>
                 )}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                    disabled={pending || files.length === 0}
+                  >
+                    {pending ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                        批量上传中...
+                      </span>
+                    ) : '批量上传'}
+                  </button>
+                </div>
+                {/* 待上传图片渲染区块，已移动到按钮下方 */}
                 {files.length > 0 && (
                   <div className="w-full flex flex-wrap gap-2 mt-2">
                     {files.slice(0, 30).map((file, idx) => (
@@ -922,20 +981,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     )}
                   </div>
                 )}
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
-                    disabled={pending || files.length === 0}
-                  >
-                    {pending ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                        批量上传中...
-                      </span>
-                    ) : '批量上传'}
-                  </button>
-                </div>
               </form>
             </div>
           )}
@@ -991,22 +1036,18 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                     >
                       {displayItems.map(renderMasonryItem)}
                     </Masonry>
-                    {isLoadingMore && (
+                    {loading && history.length === 0 ? (
                       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '16px 0' }}>
                         {Array.from({ length: 4 }, (_, i) => <SkeletonItem key={'more-' + i} />)}
                       </div>
-                    )}
-                    {hasMore && !isLoadingMore && (
+                    ) : null}
+                    {hasMore && !loading && (
                       <div style={{textAlign:'center',padding:'16px'}}>
                         <button
                           style={{
                             background: '#22d3ee', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 32px', fontSize: 16, cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 8px #22d3ee33', marginRight: 16
                           }}
-                          onClick={() => {
-                            const nextPage = page + 1;
-                            setPage(nextPage);
-                            fetchHistory(search, tagFilter, filenameFilter, nextPage, true);
-                          }}
+                          onClick={handleLoadMore}
                         >加载更多</button>
                         <button
                           style={{
@@ -1168,7 +1209,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 </div>
               )}
               <img
-                src={`/api/get_photo/${modalItem.file_id}`}
+                src={`/api/get_photo/${modalItem.file_id}?thumb=1`}
                 alt="大图"
                 loading="lazy"
                 className="w-full rounded mb-4 bg-[#232b36]"

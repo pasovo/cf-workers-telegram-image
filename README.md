@@ -20,6 +20,8 @@
 - **现代 UI**：深色主题、卡片风格、响应式设计
 - **Cloudflare D1**：数据安全、全球加速、免费额度
 - **自定义页面标题/网站图标**：支持在设置页自定义网站标题和 favicon
+- **缩略图支持**：图库和详情页自动使用缩略图，节省流量、加速加载
+- **多级文件夹与面包屑导航**：支持多级文件夹管理、面包屑导航，图片可批量移动/复制到任意文件夹
 
 ---
 
@@ -60,13 +62,14 @@
    CREATE TABLE IF NOT EXISTS images (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
      file_id TEXT NOT NULL,
+     thumb_file_id TEXT,
      chat_id TEXT NOT NULL,
      short_code TEXT UNIQUE NOT NULL,
      expire_at TIMESTAMP,
      tags TEXT,
      filename TEXT,
      size INTEGER,
-     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
    );
    ```
 
@@ -119,6 +122,10 @@
    ```
 
 5. **首次部署后，去 Cloudflare D1 控制台执行 SQL 初始化表结构（同上）**
+
+---
+
+> 详细接口说明请见 [api.md](./api.md)。
 
 ---
 

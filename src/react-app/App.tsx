@@ -1442,7 +1442,20 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       {/* 图片详情弹窗 */}
       {modalOpen && modalItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={closeModal}>
-          <div className="bg-[#181f29] rounded-2xl shadow-2xl p-0 w-full h-full max-w-full max-h-full relative flex flex-col" onClick={e => e.stopPropagation()}>
+          <div
+            className="bg-[#181f29] rounded-2xl shadow-2xl p-0 relative flex flex-col"
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '70vw',
+              height: '80vh',
+              maxWidth: 1200,
+              maxHeight: 800,
+              margin: 'auto',
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
             <button className="absolute top-4 right-6 text-gray-400 hover:text-cyan-400 text-3xl z-10" onClick={closeModal}>×</button>
             <div style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: 0}}>
               {/* 图片和加载动画等内容 */}
@@ -1461,7 +1474,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 src={`/api/get_photo/${modalItem.file_id}`}
                 alt="大图"
                 className="w-full h-full object-contain bg-[#232b36]"
-                style={{ maxHeight: '90vh', maxWidth: '90vw', margin: '0 auto', display: 'block' }}
+                style={{ maxWidth: '100%', maxHeight: '100%', display: 'block', margin: '0 auto', flex: 1 }}
                 onLoad={e => {
                   const target = e.currentTarget as HTMLImageElement | null;
                   if (target && target.naturalWidth && target.naturalHeight) {
@@ -1473,7 +1486,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 }}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 p-4">
               <div className="text-base font-bold text-gray-100 truncate">{modalItem.filename || modalItem.file_id}</div>
               <div className="text-xs text-gray-400">上传时间：{new Date(modalItem.created_at).toLocaleString()}</div>
               <div className="text-xs text-gray-400">标签：{modalItem.tags || '-'}</div>
@@ -1491,7 +1504,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                   </div>
                   <div className="text-xs text-gray-400 flex items-center">HTML：
                     <a href={`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline mx-1" style={{ wordBreak: 'break-all' }}>{`<img src="${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}" />`}</a>
-                    <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`<img src="${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}" />`)}>复制</button>
+                    <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`<img src=\"${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}\" />`)}>复制</button>
                   </div>
                 </>
               )}

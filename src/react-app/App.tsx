@@ -531,7 +531,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         // 上传
         await uploadFile(file);
         setUploadingIdx(prev => prev.filter(i => i !== idx));
-        // 不再每次上传后刷新图片列表
       } catch {
         setUploadingIdx(prev => prev.filter(i => i !== idx));
         failedIdxLocal.push(idx);
@@ -1049,7 +1048,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   }
 
   return (
-    <div className="min-h-screen bg-[#10151b]">
+    <div className="flex flex-col min-h-screen bg-[#10151b]">
       {/* 顶部导航栏 */}
       <nav className="w-full flex items-center justify-between px-6 py-3 bg-[#181f29] shadow-lg sticky top-0 z-40">
         <div className="flex items-center gap-2 min-w-[120px]">
@@ -1068,28 +1067,19 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         <div className="min-w-[120px]"></div>
       </nav>
       {/* Banner区块已移除 */}
-      <div className="container mx-auto sm:px-2 py-4 w-full">
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
-        {/* 统计区块，仅在上传/图库页显示 */}
-        {(tab==='upload'||tab==='gallery') && false && (
-          <div className="flex gap-8 mb-8">
-            <div className="card flex-1 flex flex-col items-center">
-              <span className="text-2xl font-bold text-cyan-400">{stats.total}</span>
-              <span className="text-xs text-gray-400 mt-1">上传总数</span>
-            </div>
-            <div className="card flex-1 flex flex-col items-center">
-              <span className="text-2xl font-bold text-cyan-400">{(stats.size / 1024 / 1024).toFixed(2)} MB</span>
-              <span className="text-xs text-gray-400 mt-1">空间占用</span>
-            </div>
-          </div>
-        )}
-        {/* 其余Tab内容卡片化 */}
-        <div className={`fade-content${fade ? '' : ' fade-content-leave'}${enter ? ' fade-content-enter' : ''}${fade && !enter ? ' fade-content-enter-active' : ''}`} key={tab}>
+      <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
+      <div className="flex-1 min-h-0 bg-[#10151b]">
+        <div className={`fade-content${fade ? '' : ' fade-content-leave'}${enter ? ' fade-content-enter' : ''}${fade && !enter ? ' fade-content-enter-active' : ''}`} key={tab} style={{width: '100%'}}>
           {tab==='upload' && (
-            <div className="min-h-screen flex items-center justify-center bg-[#10151b]">
-              <div className="card card-hover mb-8" style={{ minWidth: '33vw', minHeight: '25vw' }}>
+            <div className="flex flex-col items-center justify-center min-h-[60vh] w-full">
+              <div className={`card card-hover w-full max-w-2xl mx-auto`} style={{ minWidth: '33vw', minHeight: '25vw' }}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {/* 上传卡片内容... */}
                 <div className="w-full h-full flex flex-col items-center justify-center">
-                  <form className="space-y-4 w-full h-full flex flex-col justify-center">
+                  <div className="space-y-4 w-full h-full flex flex-col justify-center">
                     <div className="flex items-center justify-between mb-4 bg-[#232b36] rounded-lg px-4 shadow border border-[#232b36] min-h-[40px] w-full">
                       <div className="flex items-center h-full w-full">
                         <Breadcrumbs folder={uploadFolder} onChange={f => setUploadFolder(f)} />
@@ -1171,7 +1161,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                         </button>
                       ))}
                     </div>
-                    <div className="flex items-center gap-4 w-full">
+                    <form className="space-y-4 w-full h-full flex flex-col justify-center" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
                       <button
                         type="submit"
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
@@ -1184,15 +1174,35 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                           </span>
                         ) : '批量上传'}
                       </button>
-                    </div>
+                    </form>
                     {/* 待上传图片渲染区块... */}
-                  </form>
+                    {files.length > 0 && (
+                      <div className="w-full flex flex-wrap gap-2 mt-2">
+                        {files.slice(0, 30).map((file, idx) => (
+                          <div key={file.name + file.size + idx} className="relative flex flex-col items-center border rounded p-2 bg-[#232b36]">
+                            <button
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-[#232b36] text-gray-400 hover:text-red-400 rounded-full flex items-center justify-center shadow"
+                              type="button"
+                              title="移除"
+                              onClick={() => handleRemoveFile(idx)}
+                            >×</button>
+                            <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
+                            {uploadingIdx.includes(idx) && <span className="text-xs text-blue-400 mt-1">上传中</span>}
+                            {failedIdx.includes(idx) && <span className="text-xs text-red-400 mt-1">失败</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           )}
           {tab==='gallery' && (
-            <div className="card card-hover mb-8 w-full" style={{ width: '100%', height: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div
+              className="card card-hover mx-auto mt-8"
+              style={{ width: '90%', height: '80vh', display: 'flex', flexDirection: 'column' }}
+            >
               <div className="w-full px-4">
                 {/* 顶部操作区，sticky固定 */}
                 <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#181f29' }}>
@@ -1248,17 +1258,15 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 </div>
                 {/* 图片区，独立滚动 */}
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-                  <div className="max-w-3xl mx-auto">
-                    <h2 className="text-xl sm:text-2xl font-semibold mb-4">图库</h2>
-                    {/* 其余图片渲染内容... */}
-                    {/* Masonry、加载更多等 */}
-                    <Masonry
-                      breakpointCols={breakpointColumnsObj}
-                      className="my-masonry-grid"
-                      columnClassName="my-masonry-grid_column"
-                    >
+                  {/* 分割线和提示 */}
+                  <div className="my-4 flex items-center">
+                    <div className="flex-1 border-t border-gray-600"></div>
+                  </div>
+                  <div className="w-full">
+                    {/* 网格图片展示区 */}
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-4">
                       {displayItems.map(renderMasonryItem)}
-                    </Masonry>
+                    </div>
                     {loading && history.length === 0 ? (
                       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '16px 0' }}>
                         {Array.from({ length: 4 }, (_, i) => <SkeletonItem key={'more-' + i} />)}
@@ -1292,8 +1300,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
             </div>
           )}
           {tab==='settings' && (
-            <div className="min-h-screen flex items-center justify-center bg-[#10151b]">
-              <div className="card card-hover mb-8 flex justify-center" style={{ minWidth: '33vw', minHeight: '25vw' }}>
+            <div className="flex flex-col items-center justify-center min-h-[60vh] w-full">
+              <div className={`card card-hover w-full max-w-2xl mx-auto`} style={{ minWidth: '33vw', minHeight: '25vw' }}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {/* 设置卡片内容... */}
                 <div className="w-full h-full flex flex-col items-center justify-center">
                   <h2 className="text-lg font-bold mb-4 text-cyan-400 w-full">系统设置</h2>
                   {settings ? (
@@ -1398,6 +1411,18 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                           <div className="text-xs text-gray-400 mt-1 text-center">{dedupProgress}%（去重中...）</div>
                         </div>
                       )}
+                      {/* 上传进度条 */}
+                      {pending && files.length > 0 && (
+                        <div className="w-full mb-2">
+                          <div className="w-full h-3 bg-gray-700 rounded overflow-hidden animate-pulse">
+                            <div
+                              className="h-full bg-blue-500 transition-all duration-300"
+                              style={{ width: `${totalProgress}%` }}
+                            />
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1 text-center">{totalProgress}%（{totalProgress === 100 ? '全部完成' : '上传中...'}）</div>
+                        </div>
+                      )}
                     </div>
                   ) : <div className="text-gray-400 w-full">加载中...</div>}
                 </div>
@@ -1405,6 +1430,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
             </div>
           )}
         </div>
+      </div>
       {/* 图片详情弹窗 */}
       {modalOpen && modalItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={closeModal}>
@@ -1478,7 +1504,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 }

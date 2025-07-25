@@ -1239,7 +1239,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
             {tab==='gallery' && (
               <div
                 className="card card-hover mx-auto mt-8"
-                style={{ width: '90%', height: '80vh', display: 'flex', flexDirection: 'column' }}
+                style={{ width: '90%', display: 'flex', flexDirection: 'column' }}
               >
                 <div className="w-full px-4">
                   {/* 顶部操作区，sticky固定 */}

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.8",
+    "framer-motion": "^12.23.9",
     "hono": "4.7.7",
     "md5": "^2.3.0",
     "react": "19.0.0",

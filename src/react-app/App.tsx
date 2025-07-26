@@ -879,39 +879,43 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     ? Array.from({ length: 8 }, (_, i) => ({ skeleton: true, id: 'loading-more-' + i }))
     : [];
 
-  // 在 AppContent 组件内部添加 handleDeduplicate 函数（带进度条和并发下载）
+  // 在 AppContent 组件内部添加 handleDeduplicate 函数（递归所有文件夹）
   const handleDeduplicate = async (selectedIds?: string[]) => {
-    setToast({ message: '正在去重...', type: 'info' });
+    setToast({ message: '正在递归获取所有图片...', type: 'info' });
     setDedupProgress(0);
-    // 1. 拉取所有图片历史（分页拉取）
+    // 1. 获取所有文件夹
+    const resFolders = await fetchWithAuth('/api/folders');
+    const dataFolders = await resFolders.json();
+    const allFolders: string[] = dataFolders.folders || ['/'];
+    // 2. 递归拉取所有图片
     type ImageItem = { file_id: string; filename?: string };
     let allImages: ImageItem[] = [];
-    let page = 1, hasMore = true;
-    const pageSize = 100;
-    while (hasMore) {
-      const res = await fetchWithAuth(`/api/history?page=${page}&limit=${pageSize}`);
-      const data = await res.json();
-      if (data.status === 'success') {
-        allImages = allImages.concat(data.data as ImageItem[]);
-        hasMore = (data.data as ImageItem[]).length === pageSize;
-        page++;
-      } else {
-        setToast({ message: '加载图片历史失败', type: 'error' });
-        setDedupProgress(0);
-        return;
+    for (const folder of allFolders) {
+      let page = 1, hasMore = true;
+      const pageSize = 100;
+      while (hasMore) {
+        const res = await fetchWithAuth(`/api/history?page=${page}&limit=${pageSize}&folder=${encodeURIComponent(folder)}`);
+        const data = await res.json();
+        if (data.status === 'success') {
+          allImages = allImages.concat(data.data as ImageItem[]);
+          hasMore = (data.data as ImageItem[]).length === pageSize;
+          page++;
+        } else {
+          hasMore = false;
+        }
       }
     }
-    // 2. 只对选中的图片去重（如果有传 selectedIds）
+    // 3. 只对选中的图片去重（如果有传 selectedIds）
     if (selectedIds && selectedIds.length > 0) {
       allImages = allImages.filter(img => selectedIds.includes(img.file_id));
     }
-    // 3. 并发下载所有图片并计算 hash
+    // 4. 并发下载所有图片并计算 hash
     const hashMap: Record<string, ImageItem[]> = {};
     const toDelete: string[] = [];
-    const concurrency = 6; // 并发数
+    const concurrency = 6;
     let finished = 0;
     const total = allImages.length;
-    const tasks = allImages.map((img) => async () => {
+    const tasks: (() => Promise<void>)[] = allImages.map((img) => async () => {
       try {
         const resp = await fetchWithAuth(`/api/get_photo/${img.file_id}`);
         if (!resp.ok) return;
@@ -935,7 +939,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       await Promise.all(runners);
     };
     await runConcurrent(tasks, concurrency);
-    // 4. 分组去重，保留每组第一个，其余加入待删除
+    // 5. 分组去重，保留每组第一个，其余加入待删除
     Object.values(hashMap).forEach((group: ImageItem[]) => {
       if (group.length > 1) {
         group.slice(1).forEach((img: ImageItem) => toDelete.push(img.file_id));
@@ -946,7 +950,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
       setDedupProgress(0);
       return;
     }
-    // 5. 批量删除
+    // 6. 批量删除
     const res = await fetchWithAuth('/api/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('jwt_token') || ''}` },

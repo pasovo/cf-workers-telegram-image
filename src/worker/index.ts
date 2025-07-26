@@ -457,42 +457,6 @@ app.get('/api/test-db', async (c) => {
 });
 
 /**
- * 图片去重接口（仅管理员可用）
- * 保留最后一条记录，删除重复项
- */
-app.post('/api/deduplicate', async (c) => {
-  // 简单鉴权
-  const token = getJwtToken(c);
-  if (!token) {
-    return c.json({ status: 'error', message: '未登录' }, { status: 401 });
-  }
-  
-  const DB = c.env.DB;
-  // 查找重复 hash
-  const { results } = await DB.prepare('SELECT hash, COUNT(*) as n FROM images WHERE hash IS NOT NULL GROUP BY hash HAVING n > 1').all();
-  let deleted = 0;
-  const duplicates: any[] = [];
-  
-  for (const row of results) {
-    // 保留最后一条，其余删除
-    const dups = await DB.prepare('SELECT * FROM images WHERE hash = ? ORDER BY created_at ASC').bind(row.hash).all();
-    const toDelete = dups.results.slice(0, -1); // 保留最后一条
-    const toKeep = dups.results[dups.results.length - 1];
-    
-    for (const img of toDelete) {
-      await DB.prepare('DELETE FROM images WHERE id = ?').bind(img.id).run();
-      deleted++;
-    }
-    
-    if (toDelete.length > 0) {
-      duplicates.push({ hash: row.hash, keep: toKeep, deleted: toDelete });
-    }
-  }
-  
-  return c.json({ status: 'success', deleted, duplicates });
-});
-
-/**
  * 文件夹管理接口 - 获取所有文件夹
  */
 app.get('/api/folders', async (c) => {

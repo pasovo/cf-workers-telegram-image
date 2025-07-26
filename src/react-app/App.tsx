@@ -209,6 +209,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [bgImageUrl, setBgImageUrl] = useState<string>(() => localStorage.getItem('siteBgImage') || '');
   const [siteOpacity, setSiteOpacity] = useState<string>(() => localStorage.getItem('siteOpacity') || '1');
 
+  // 新增上传目标文件夹状态
+  const [uploadFolder, setUploadFolder] = useState<string>("/");
+  const [uploadFolderModalOpen, setUploadFolderModalOpen] = useState(false);
+  const [currentFolder, setCurrentFolder] = useState<string>("/");
+  const [galleryFolderModalOpen, setGalleryFolderModalOpen] = useState(false);
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
+
   const handleToggleTag = (tag: string) => {
     setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
@@ -240,9 +247,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const LIMIT = 50;
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  // 1. 在 AppContent 组件顶部添加图库缓存
   const galleryCache = React.useRef<{ [key: string]: any[] }>({});
-  // 2. 修改 fetchImages，先查缓存
   const fetchImages = async (searchVal = '', tagVal = '', filenameVal = '', pageNum = 1, append = false, folderPath = '') => {
     const cacheKey = `${searchVal}|${tagVal}|${filenameVal}|${pageNum}|${folderPath}`;
     if (galleryCache.current[cacheKey]) {
@@ -298,14 +303,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     if (!isAuthed) return;
     setPage(1);
     setHasMore(true);
-    fetchImages(search, tagFilter, filenameFilter, 1, false);
-  }, [isAuthed, search, tagFilter, filenameFilter]);
+    fetchImages(search, tagFilter, filenameFilter, 1, false, currentFolder);
+  }, [isAuthed, search, tagFilter, filenameFilter, currentFolder]);
 
   // 加载更多按钮事件
   const handleLoadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
-    fetchImages(search, tagFilter, filenameFilter, nextPage, true);
+    fetchImages(search, tagFilter, filenameFilter, nextPage, true, currentFolder);
   };
 
   // 处理文件添加（多选、拖拽、粘贴）
@@ -951,7 +956,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     setDedupProgress(0);
     if (data.status === 'success') {
       setToast({ message: `去重完成，删除了${toDelete.length}条重复图片`, type: 'success' });
-      fetchImages(search, tagFilter, filenameFilter, 1, false);
+      fetchImages(search, tagFilter, filenameFilter, 1, false, currentFolder);
     } else {
       setToast({ message: '去重失败', type: 'error' });
     }
@@ -1009,7 +1014,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   // 新增批量移动/复制逻辑
   const [copyModalOpen, setCopyModalOpen] = useState(false);
   const [allFolders, setAllFolders] = useState<string[]>([]);
-  const [currentFolder, setCurrentFolder] = useState<string>('/');
 
   async function handleCopyImages(folder: string) {
     setCopyModalOpen(false);
@@ -1033,17 +1037,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     fetchFolders();
   }, [currentFolder]);
 
-  // 新增上传目标文件夹状态
-  const [uploadFolder, setUploadFolder] = useState<string>('/');
-  // 新增上传页文件夹选择弹窗状态
-  const [uploadFolderModalOpen, setUploadFolderModalOpen] = useState(false);
-
-  // 在 AppContent 组件顶部 useState 区域添加：
-  const [galleryFolderModalOpen, setGalleryFolderModalOpen] = useState(false);
-
-  // 1. 在 useState 区域恢复 moveModalOpen
-  const [moveModalOpen, setMoveModalOpen] = useState(false);
-
   // 在 AppContent 组件内，galleryFolderModalOpen、moveModalOpen、copyModalOpen 定义附近，补充 handleMoveImages 函数：
   async function handleMoveImages(folder: string) {
     setMoveModalOpen(false);
@@ -1056,6 +1049,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     setSelected([]);
     fetchImages(search, tagFilter, filenameFilter, 1, false, currentFolder);
   }
+
+  // useEffect: 初始化和筛选变化时重置分页
+  useEffect(() => {
+    if (!isAuthed) return;
+    setPage(1);
+    setHasMore(true);
+    fetchImages(search, tagFilter, filenameFilter, 1, false, currentFolder); 
+  }, [isAuthed, search, tagFilter, filenameFilter, currentFolder]);
 
   // 在 useEffect 区域添加：
   useEffect(() => {

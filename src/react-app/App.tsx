@@ -306,12 +306,28 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     fetchImages(search, tagFilter, filenameFilter, 1, false, currentFolder);
   }, [isAuthed, search, tagFilter, filenameFilter, currentFolder]);
 
+  // 新增 loadingMore 状态
+  const [loadingMore, setLoadingMore] = useState(false);
+  // 记录滚动位置
+  let lastScrollTop = 0;
+
   // 加载更多按钮事件
   const handleLoadMore = () => {
+    lastScrollTop = window.scrollY;
+    setLoadingMore(true);
     const nextPage = page + 1;
     setPage(nextPage);
-    fetchImages(search, tagFilter, filenameFilter, nextPage, true, currentFolder);
+    fetchImages(search, tagFilter, filenameFilter, nextPage, true, currentFolder).finally(() => {
+      setLoadingMore(false);
+      // 恢复滚动条位置
+      window.scrollTo({ top: lastScrollTop });
+    });
   };
+
+  // 渲染骨架屏
+  const loadingMoreItems = loadingMore
+    ? Array.from({ length: 8 }, (_, i) => ({ skeleton: true, id: 'loading-more-' + i }))
+    : [];
 
   // 处理文件添加（多选、拖拽、粘贴）
   // 修改 handleAddFiles，自动去重
@@ -874,13 +890,9 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     ? Array.from({ length: 20 }, (_, i) => ({ skeleton: true, id: 'skeleton-' + i }))
     : history;
 
-  // 添加加载更多时的骨架屏
-  const loadingMoreItems = loading && history.length > 0
-    ? Array.from({ length: 8 }, (_, i) => ({ skeleton: true, id: 'loading-more-' + i }))
-    : [];
-
   // 在 AppContent 组件内部添加 handleDeduplicate 函数（递归所有文件夹）
   const handleDeduplicate = async (selectedIds?: string[]) => {
+    lastScrollTop = window.scrollY;
     setToast({ message: '正在递归获取所有图片...', type: 'info' });
     setDedupProgress(0);
     // 1. 获取所有文件夹
@@ -960,7 +972,9 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     setDedupProgress(0);
     if (data.status === 'success') {
       setToast({ message: `去重完成，删除了${toDelete.length}条重复图片`, type: 'success' });
-      fetchImages(search, tagFilter, filenameFilter, 1, false, currentFolder);
+      fetchImages(search, tagFilter, filenameFilter, 1, false, currentFolder).then(() => {
+        window.scrollTo({ top: lastScrollTop });
+      });
     } else {
       setToast({ message: '去重失败', type: 'error' });
     }

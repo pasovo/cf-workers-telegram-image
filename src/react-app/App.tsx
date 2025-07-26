@@ -118,23 +118,23 @@ function FolderSelectModal({ open, onClose, onConfirm, folders, currentFolder }:
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
-          <div className="bg-[#181f29] rounded-2xl shadow-2xl p-6 w-full max-w-2xl relative flex flex-col sm:flex-row gap-6" onClick={e => e.stopPropagation()}>
-            <div className="min-w-[180px] max-h-72 overflow-y-auto border-r border-[#232b36] pr-4">
-              <div className="mb-2 text-xs text-gray-400">当前位置：</div>
-              <FolderTree tree={tree} path="/" selected={selected} onSelect={p => { setSelected(p); setInput(p); }} />
-            </div>
-            <div className="flex-1 flex flex-col">
-              <div className="mb-4 text-lg font-bold text-cyan-400">选择或输入文件夹</div>
-              <input
-                className="w-full border rounded px-3 py-2 bg-[#232b36] text-gray-100 focus:outline-none focus:border-cyan-400 mb-2"
-                value={input}
-                onChange={e => { setInput(e.target.value.replace(/\s/g, '')); setSelected(e.target.value.replace(/\s/g, '')); }}
-                placeholder="/目标/文件夹/"
-              />
-              {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
-              <button className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 mt-4" onClick={handleConfirm}>确定</button>
-            </div>
-          </div>
+      <div className="bg-[#181f29] rounded-2xl shadow-2xl p-6 w-full max-w-2xl relative flex flex-col sm:flex-row gap-6" onClick={e => e.stopPropagation()}>
+        <div className="min-w-[180px] max-h-72 overflow-y-auto border-r border-[#232b36] pr-4">
+          <div className="mb-2 text-xs text-gray-400">当前位置：</div>
+          <FolderTree tree={tree} path="/" selected={selected} onSelect={p => { setSelected(p); setInput(p); }} />
+        </div>
+        <div className="flex-1 flex flex-col">
+          <div className="mb-4 text-lg font-bold text-cyan-400">选择或输入文件夹</div>
+          <input
+            className="w-full border rounded px-3 py-2 bg-[#232b36] text-gray-100 focus:outline-none focus:border-cyan-400 mb-2"
+            value={input}
+            onChange={e => { setInput(e.target.value.replace(/\s/g, '')); setSelected(e.target.value.replace(/\s/g, '')); }}
+            placeholder="/目标/文件夹/"
+          />
+          {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
+          <button className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 mt-4" onClick={handleConfirm}>确定</button>
+        </div>
+      </div>
         </motion.div>
       )}
     </AnimatePresence>
@@ -174,7 +174,6 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   const [toast, setToast] = useState<{ message: string; type?: 'info' | 'error' | 'success' }>({ message: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expire, setExpire] = useState('forever');
-  const SHORTLINK_DOMAIN = (window as any).SHORTLINK_DOMAIN || '';
   const [selected, setSelected] = useState<string[]>([]); // 多选 file_id
   const [tagFilter, setTagFilter] = useState('');
   const [filenameFilter] = useState('');
@@ -284,9 +283,11 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         setHasMore(data.data.length === LIMIT);
       } else {
         setToast({ message: data.message || '加载图片失败', type: 'error' });
+        setHasMore(true);
       }
     } catch (error) {
-      setToast({ message: '加载图片失败，请刷新页面重试', type: 'error' });
+      setToast({ message: '加载图片失败，请重试', type: 'error' });
+      setHasMore(true);
     } finally {
       setLoading(false);
     }
@@ -656,14 +657,14 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
   // 弹窗打开时获取图片尺寸和大小
   React.useEffect(() => {
     if (!modalOpen || !modalItem) return;
-    // 获取尺寸
+    // 获取原图尺寸
     const img = new window.Image();
     img.onload = () => {
       setImgInfo(prev => ({ ...prev, width: img.naturalWidth, height: img.naturalHeight }));
     };
     img.src = `/api/get_photo/${modalItem.file_id}`;
-    // 获取大小
-    fetchWithAuth(`/api/get_photo/${modalItem.file_id}`)
+    // 获取原图大小（HEAD 请求）
+    fetch(`/api/get_photo/${modalItem.file_id}`, { method: 'HEAD' })
       .then(res => {
         const size = Number(res.headers.get('content-length')) || 0;
         setImgInfo(prev => ({ ...prev, size }));
@@ -863,10 +864,15 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
     );
   };
 
-  // Masonry items准备
+  // Masonry items准备 - 修复骨架屏逻辑
   const displayItems = loading && history.length === 0
     ? Array.from({ length: 20 }, (_, i) => ({ skeleton: true, id: 'skeleton-' + i }))
     : history;
+
+  // 添加加载更多时的骨架屏
+  const loadingMoreItems = loading && history.length > 0
+    ? Array.from({ length: 8 }, (_, i) => ({ skeleton: true, id: 'loading-more-' + i }))
+    : [];
 
   // 在 AppContent 组件内部添加 handleDeduplicate 函数（带进度条和并发下载）
   const handleDeduplicate = async (selectedIds?: string[]) => {
@@ -1095,7 +1101,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
         <div className="min-w-[120px]"></div>
       </nav>
       {/* Banner区块已移除 */}
-      <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '' })} />
       <div className="flex-1 min-h-0 bg-[#10151b]">
         <AnimatePresence mode="wait">
           <motion.div
@@ -1106,137 +1112,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
             transition={{ duration: 0.3 }}
             style={{ width: '100%' }}
           >
-            {tab==='upload' && (
-              <div className="flex flex-col items-center justify-center min-h-[60vh] w-full">
-                <div
-                  className={`card card-hover w-full max-w-2xl mx-auto${dragActive ? ' ring-4 ring-cyan-400 rounded-2xl' : ''}`}
-                  style={{ minWidth: '33vw', minHeight: '25vw' }}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  {/* 上传卡片内容... */}
-                  <div className="w-full h-full flex flex-col items-center justify-center">
-                    <div className="space-y-4 w-full h-full flex flex-col justify-center">
-                      <div className="flex items-center justify-between mb-4 bg-[#232b36] rounded-lg px-4 shadow border border-[#232b36] min-h-[40px] w-full">
-                        <div className="flex items-center h-full w-full">
-                          <Breadcrumbs folder={uploadFolder} onChange={f => setUploadFolder(f)} />
-                        </div>
-                        <button
-                          className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-cyan-600 text-white hover:bg-cyan-700 ml-2"
-                          style={{ minWidth: 100 }}
-                          onClick={() => setUploadFolderModalOpen(true)}
-                        >选择文件夹</button>
-                      </div>
-                      <FolderSelectModal open={uploadFolderModalOpen} onClose={() => setUploadFolderModalOpen(false)} onConfirm={f => { setUploadFolder(f); setUploadFolderModalOpen(false); }} folders={allFolders} currentFolder={uploadFolder} />
-                      <label
-                        htmlFor="photo"
-                        className="w-full bg-[#232b36] hover:bg-[#232b36]/80 text-gray-200 font-medium py-2 px-4 rounded-md border border-[#232b36] transition duration-300 flex items-center justify-center cursor-pointer"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                        </svg>
-                        选择图片（可多选/拖拽/粘贴）
-                        <input
-                          type="file"
-                          id="photo"
-                          name="photo"
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                          onChange={handleFileChange}
-                          ref={fileInputRef}
-                        />
-                      </label>
-                      <div className="flex flex-wrap gap-2 w-full">
-                        {/* 标签按钮等内容 */}
-                        <span className="text-sm text-gray-300">标签：</span>
-                        {tagOptions.map(tag => (
-                          <button
-                            key={tag}
-                            type="button"
-                            className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 mr-1 mb-1 ${selectedTags.includes(tag) ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
-                            onClick={() => handleToggleTag(tag)}
-                          >
-                            {selectedTags.includes(tag) ? '✓ ' : ''}{tag}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-cyan-400 hover:border-cyan-400 mb-1"
-                          onClick={() => setShowAddTag(true)}
-                        >+
-                        </button>
-                        {showAddTag && (
-                          <input
-                            type="text"
-                            className="border rounded px-2 py-1 bg-[#232b36] text-gray-100 ml-2"
-                            placeholder="新标签"
-                            value={newTag}
-                            onChange={e => setNewTag(e.target.value)}
-                            onBlur={handleAddTag}
-                            onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); }}
-                            autoFocus
-                            style={{ width: 80 }}
-                          />
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 w-full">
-                        <span className="text-sm text-gray-300">有效期：</span>
-                        {[
-                          { label: '永久', value: 'forever' },
-                          { label: '1天', value: '1' },
-                          { label: '7天', value: '7' },
-                          { label: '30天', value: '30' },
-                        ].map(opt => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 mr-2 mb-1 ${expire === opt.value ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
-                            onClick={() => setExpire(opt.value)}
-                          >
-                            {expire === opt.value ? '✓ ' : ''}{opt.label}
-                          </button>
-                        ))}
-                      </div>
-                      <form className="space-y-4 w-full h-full flex flex-col justify-center" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
-                        <button
-                          type="submit"
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
-                          disabled={pending || files.length === 0}
-                        >
-                          {pending ? (
-                            <span className="flex items-center justify-center gap-2">
-                              <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                              批量上传中...
-                            </span>
-                          ) : '批量上传'}
-                        </button>
-                      </form>
-                      {/* 待上传图片渲染区块... */}
-                      {files.length > 0 && (
-                        <div className="w-full flex flex-wrap gap-2 mt-2">
-                          {files.slice(0, 30).map((file, idx) => (
-                            <div key={file.name + file.size + idx} className="relative flex flex-col items-center border rounded p-2 bg-[#232b36]">
-                              <button
-                                className="absolute -top-2 -right-2 w-6 h-6 bg-[#232b36] text-gray-400 hover:text-red-400 rounded-full flex items-center justify-center shadow"
-                                type="button"
-                                title="移除"
-                                onClick={() => handleRemoveFile(idx)}
-                              >×</button>
-                              <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
-                              {uploadingIdx.includes(idx) && <span className="text-xs text-blue-400 mt-1">上传中</span>}
-                              {failedIdx.includes(idx) && <span className="text-xs text-red-400 mt-1">失败</span>}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {tab==='gallery' && (
+            {tab === 'gallery' && (
               <div
                 className="card card-hover mx-auto mt-8"
                 style={{ width: '90%', display: 'flex', flexDirection: 'column' }}
@@ -1269,13 +1145,13 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                               }}
                             >上一级</button>
                           )}
-                        </div>
+            </div>
                         <button
                           className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-cyan-600 text-white hover:bg-cyan-700 ml-2"
                           style={{ minWidth: 100 }}
                           onClick={() => setGalleryFolderModalOpen(true)}
                         >选择文件夹</button>
-                      </div>
+            </div>
                       {/* 文件夹选择弹窗（与上传页一致，独立控制） */}
                       <FolderSelectModal open={galleryFolderModalOpen} onClose={() => setGalleryFolderModalOpen(false)} onConfirm={f => { setCurrentFolder(f); setGalleryFolderModalOpen(false); setPage(1); setHasMore(true); fetchImages(search, tagFilter, filenameFilter, 1, false, f); }} folders={allFolders} currentFolder={currentFolder} />
                       {/* 筛选栏 */}
@@ -1290,7 +1166,7 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                             {tag}
                           </button>
                         ))}
-                      </div>
+          </div>
                       {/* 批量操作栏 */}
                       {/* 在sticky操作区的批量操作栏前始终显示"选择/取消选择"按钮 */}
                       <div className="flex items-center gap-2 mb-2">
@@ -1355,7 +1231,10 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                       })()}
                       {/* 网格图片展示区 */}
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-1">
-                        {displayItems.filter(img => 'folder' in img && img.folder === currentFolder).map(renderMasonryItem)}
+                        {displayItems.map(img =>
+                          'folder' in img ? (img.folder === currentFolder ? renderMasonryItem(img) : null) : renderMasonryItem(img)
+                        )}
+                        {loadingMoreItems.map(renderMasonryItem)}
                       </div>
                       {loading && history.length === 0 ? (
                         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '16px 0' }}>
@@ -1389,15 +1268,145 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                 </div>
               </div>
             )}
-            {tab==='settings' && (
+            {tab === 'upload' && (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] w-full">
+                <div
+                  className={`card card-hover w-full max-w-2xl mx-auto${dragActive ? ' ring-4 ring-cyan-400 rounded-2xl' : ''}`}
+                style={{ minWidth: '33vw', minHeight: '25vw' }}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                  {/* 上传卡片内容... */}
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                  <div className="space-y-4 w-full h-full flex flex-col justify-center">
+                    <div className="flex items-center justify-between mb-4 bg-[#232b36] rounded-lg px-4 shadow border border-[#232b36] min-h-[40px] w-full">
+                      <div className="flex items-center h-full w-full">
+                        <Breadcrumbs folder={uploadFolder} onChange={f => setUploadFolder(f)} />
+                      </div>
+                      <button
+                        className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-cyan-600 text-white hover:bg-cyan-700 ml-2"
+                        style={{ minWidth: 100 }}
+                        onClick={() => setUploadFolderModalOpen(true)}
+                      >选择文件夹</button>
+                    </div>
+                    <FolderSelectModal open={uploadFolderModalOpen} onClose={() => setUploadFolderModalOpen(false)} onConfirm={f => { setUploadFolder(f); setUploadFolderModalOpen(false); }} folders={allFolders} currentFolder={uploadFolder} />
+                    <label
+                      htmlFor="photo"
+                      className="w-full bg-[#232b36] hover:bg-[#232b36]/80 text-gray-200 font-medium py-2 px-4 rounded-md border border-[#232b36] transition duration-300 flex items-center justify-center cursor-pointer"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                      </svg>
+                      选择图片（可多选/拖拽/粘贴）
+                      <input
+                        type="file"
+                        id="photo"
+                        name="photo"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleFileChange}
+                        ref={fileInputRef}
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2 w-full">
+                      {/* 标签按钮等内容 */}
+                      <span className="text-sm text-gray-300">标签：</span>
+                      {tagOptions.map(tag => (
+                        <button
+                          key={tag}
+                          type="button"
+                          className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 mr-1 mb-1 ${selectedTags.includes(tag) ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                          onClick={() => handleToggleTag(tag)}
+                        >
+                          {selectedTags.includes(tag) ? '✓ ' : ''}{tag}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="px-3 py-1 rounded-lg font-medium text-sm transition border-2 bg-[#232b36] border-[#232b36] text-cyan-400 hover:border-cyan-400 mb-1"
+                        onClick={() => setShowAddTag(true)}
+                      >+
+                      </button>
+                      {showAddTag && (
+                        <input
+                          type="text"
+                          className="border rounded px-2 py-1 bg-[#232b36] text-gray-100 ml-2"
+                          placeholder="新标签"
+                          value={newTag}
+                          onChange={e => setNewTag(e.target.value)}
+                          onBlur={handleAddTag}
+                          onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); }}
+                          autoFocus
+                          style={{ width: 80 }}
+                        />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 w-full">
+                      <span className="text-sm text-gray-300">有效期：</span>
+                      {[
+                        { label: '永久', value: 'forever' },
+                        { label: '1天', value: '1' },
+                        { label: '7天', value: '7' },
+                        { label: '30天', value: '30' },
+                      ].map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={`px-3 py-1 rounded-lg font-medium text-sm transition border-2 mr-2 mb-1 ${expire === opt.value ? 'bg-cyan-500 border-cyan-400 text-white' : 'bg-[#232b36] border-[#232b36] text-gray-300'} hover:border-cyan-400`}
+                          onClick={() => setExpire(opt.value)}
+                        >
+                          {expire === opt.value ? '✓ ' : ''}{opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <form className="space-y-4 w-full h-full flex flex-col justify-center" onSubmit={e => { e.preventDefault(); handleUploadAll(); }}>
+                      <button
+                        type="submit"
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                        disabled={pending || files.length === 0}
+                      >
+                        {pending ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                            批量上传中...
+                          </span>
+                        ) : '批量上传'}
+                      </button>
+                    </form>
+                    {/* 待上传图片渲染区块... */}
+                    {files.length > 0 && (
+                      <div className="w-full flex flex-wrap gap-2 mt-2">
+                        {files.slice(0, 30).map((file, idx) => (
+                          <div key={file.name + file.size + idx} className="relative flex flex-col items-center border rounded p-2 bg-[#232b36]">
+                            <button
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-[#232b36] text-gray-400 hover:text-red-400 rounded-full flex items-center justify-center shadow"
+                              type="button"
+                              title="移除"
+                              onClick={() => handleRemoveFile(idx)}
+                            >×</button>
+                            <span className="text-xs break-all max-w-[80px] text-gray-300">{file.name}</span>
+                            {uploadingIdx.includes(idx) && <span className="text-xs text-blue-400 mt-1">上传中</span>}
+                            {failedIdx.includes(idx) && <span className="text-xs text-red-400 mt-1">失败</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+            {tab === 'settings' && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] w-full">
                 <div className={`card card-hover w-full max-w-2xl mx-auto`} style={{ minWidth: '33vw', minHeight: '25vw' }}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <div className="w-full h-full flex flex-col items-center justify-center">
-                    <h2 className="text-lg font-bold mb-4 text-cyan-400 w-full">系统设置</h2>
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                  <h2 className="text-lg font-bold mb-4 text-cyan-400 w-full">系统设置</h2>
                     <div className="space-y-6 w-full">
                       <div className="flex gap-12 mb-2 w-full">
                         <div className="flex flex-col items-center flex-1">
@@ -1556,8 +1565,8 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                           >保存</button>
                           {bgImageUrl && bgImageUrl.startsWith('data:') && (
                             <img src={bgImageUrl} alt="预览" className="ml-4 rounded shadow max-h-12" style={{maxWidth: 64}} />
-                          )}
-                        </div>
+                      )}
+                    </div>
                       </div>
                       {/* 新增：网站透明度设置 */}
                       <div className="w-full">
@@ -1588,95 +1597,48 @@ function AppContent({ isAuthed, setIsAuthed }: { isAuthed: boolean; setIsAuthed:
                         >退出登录</button>
                       </div>
                     </div>
-                  </div>
                 </div>
               </div>
-            )}
+            </div>
+          )}
           </motion.div>
         </AnimatePresence>
-      </div>
-      {/* 图片详情弹窗 */}
-      <AnimatePresence>
-        {modalOpen && modalItem && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-            onClick={closeModal}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-          >
-            <div
-              className="bg-[#181f29] rounded-2xl shadow-2xl p-0 relative flex flex-col"
-              onClick={e => e.stopPropagation()}
-              style={{
-                width: '70vw',
-                height: '80vh',
-                maxWidth: 1200,
-                maxHeight: 800,
-                margin: 'auto',
-                padding: 0,
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              <button className="absolute top-4 right-6 text-gray-400 hover:text-cyan-400 text-3xl z-10" onClick={closeModal}>×</button>
-              <div style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: 0}}>
-                {/* 图片和加载动画等内容 */}
-                {!imgInfo.width && !imgInfo.size && (
-                  <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 2}} className="w-full h-80 flex items-center justify-center bg-[#232b36] animate-pulse rounded">
-                    <span className="text-gray-400">图片加载中...</span>
-                  </div>
-                )}
-                {/* 加载失败时显示提示 */}
-                {imgInfo.size === -1 && (
-                  <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 3, background: '#232b36', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12}}>
-                    <span className="text-red-400">图片加载失败</span>
-                  </div>
-                )}
-                <img
-                  src={`/api/get_photo/${modalItem.file_id}`}
-                  alt="大图"
-                  className="w-full h-full object-contain bg-[#232b36]"
-                  style={{ maxWidth: '100%', maxHeight: '100%', display: 'block', margin: '0 auto', flex: 1 }}
-                  onLoad={e => {
-                    const target = e.currentTarget as HTMLImageElement | null;
-                    if (target && target.naturalWidth && target.naturalHeight) {
-                      setImgInfo(prev => ({ ...prev, width: target.naturalWidth, height: target.naturalHeight }));
-                    }
-                  }}
-                  onError={() => {
-                    setImgInfo(prev => ({ ...prev, size: -1 }));
-                  }}
-                />
-              </div>
-              <div className="space-y-2 p-4">
-                <div className="text-base font-bold text-gray-100 truncate">{modalItem.filename || modalItem.file_id}</div>
-                <div className="text-xs text-gray-400">上传时间：{new Date(modalItem.created_at).toLocaleString()}</div>
-                <div className="text-xs text-gray-400">标签：{modalItem.tags || '-'}</div>
-                <div className="text-xs text-gray-400">尺寸：{imgInfo.width} × {imgInfo.height}</div>
-                <div className="text-xs text-gray-400">大小：{imgInfo.size > 0 ? (imgInfo.size > 1024*1024 ? (imgInfo.size/1024/1024).toFixed(2)+' MB' : (imgInfo.size/1024).toFixed(1)+' KB') : '-'}</div>
-                {modalItem.short_code && (
-                  <>
-                    <div className="text-xs text-gray-400 flex items-center">直链：
-                      <a href={`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline break-all ml-1">{`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`}</a>
-                      <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`)}>复制</button>
-                    </div>
-                    <div className="text-xs text-gray-400 flex items-center">Markdown：
-                      <a href={`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline mx-1" style={{ wordBreak: 'break-all' }}>{`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`}</a>
-                      <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`![](${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code})`)}>复制</button>
-                    </div>
-                    <div className="text-xs text-gray-400 flex items-center">HTML：
-                      <a href={`${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline mx-1" style={{ wordBreak: 'break-all' }}>{`<img src="${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}" />`}</a>
-                      <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`<img src=\"${SHORTLINK_DOMAIN || window.location.origin}/img/${modalItem.short_code}\" />`)}>复制</button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      {/* Modal 独立渲染，避免影响主内容区挂载和滚动 */}
+      {modalOpen && (
+        <ImageDetailModal
+          open={modalOpen}
+          item={modalItem}
+          onClose={closeModal}
+          imgInfo={imgInfo}
+          handleCopy={handleCopy}
+          images={history.filter(i => ('folder' in i ? i.folder === currentFolder : true))}
+          currentIndex={history.filter(i => ('folder' in i ? i.folder === currentFolder : true)).findIndex(i => i.file_id === modalItem?.file_id)}
+          setModalItem={setModalItem}
+          onDelete={async () => {
+            if (window.confirm('确定要删除这张图片吗？')) {
+              try {
+                const res = await fetchWithAuth('/api/delete', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids: [modalItem.file_id] })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                  setToast({ message: '删除成功', type: 'success' });
+                  closeModal();
+                  fetchImages(search, tagFilter, filenameFilter, 1, false, currentFolder);
+                  fetchStats();
+                } else {
+                  setToast({ message: '删除失败', type: 'error' });
+                }
+              } catch {
+                setToast({ message: '删除失败', type: 'error' });
+              }
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1692,6 +1654,163 @@ async function fetchWithAuth(url: string, options: any = {}) {
     localStorage.setItem('jwt_token', refreshedToken);
   }
   return res;
+}
+
+// 在 AppContent 组件底部添加 ImageDetailModal 组件
+function ImageDetailModal({ open, item, onClose, imgInfo, handleCopy, images, currentIndex, setModalItem, onDelete }: {
+  open: boolean,
+  item: any,
+  onClose: () => void,
+  imgInfo: { width: number, height: number, size: number },
+  handleCopy: (text: string) => void,
+  images: any[],
+  currentIndex: number,
+  setModalItem: (item: any) => void,
+  onDelete: () => void
+}) {
+  if (!open || !item) return null;
+  const SHORTLINK_DOMAIN = (window as any).SHORTLINK_DOMAIN || window.location.origin;
+  // 下载图片
+  const handleDownload = () => {
+    const link = document.createElement('a');
+    link.href = `/api/get_photo/${item.file_id}`;
+    link.download = item.filename || item.file_id;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  // 键盘左右键切换
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        setModalItem(images[currentIndex - 1]);
+      } else if (e.key === 'ArrowRight' && currentIndex < images.length - 1) {
+        setModalItem(images[currentIndex + 1]);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [currentIndex, images, setModalItem]);
+  return (
+    <AnimatePresence>
+      <motion.div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+        onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.25 }}
+      >
+        <div
+          className="bg-[#181f29] rounded-2xl shadow-2xl p-0 relative flex flex-col"
+          onClick={e => e.stopPropagation()}
+          style={{
+            width: '70vw',
+            height: '80vh',
+            maxWidth: 1200,
+            maxHeight: 800,
+            margin: 'auto',
+            padding: 0,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <button className="absolute top-4 right-6 text-gray-400 hover:text-cyan-400 text-3xl z-10" onClick={onClose}>×</button>
+          {/* 左右切换按钮 */}
+          {currentIndex > 0 && (
+            <button
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-cyan-700 text-white rounded-full w-10 h-10 flex items-center justify-center z-20"
+              onClick={() => setModalItem(images[currentIndex - 1])}
+              style={{ fontSize: 28 }}
+            >&#8592;</button>
+          )}
+          {currentIndex < images.length - 1 && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-cyan-700 text-white rounded-full w-10 h-10 flex items-center justify-center z-20"
+              onClick={() => setModalItem(images[currentIndex + 1])}
+              style={{ fontSize: 28 }}
+            >&#8594;</button>
+          )}
+          <div style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: 0}}>
+            {/* 图片和加载动画等内容 */}
+            {!imgInfo.width && !imgInfo.size && (
+              <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 2}} className="w-full h-80 flex items-center justify-center bg-[#232b36] animate-pulse rounded">
+                <span className="text-gray-400">图片加载中...</span>
+              </div>
+            )}
+            {/* 加载失败时显示提示 */}
+            {imgInfo.size === -1 && (
+              <div style={{position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 3, background: '#232b36', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12}}>
+                <span className="text-red-400">图片加载失败</span>
+              </div>
+            )}
+            <img
+              src={`/api/get_photo/${item.file_id}`}
+              alt="大图"
+              className="w-full h-full object-contain bg-[#232b36]"
+              style={{ maxWidth: '100%', maxHeight: '100%', display: 'block', margin: '0 auto', flex: 1 }}
+              onLoad={e => {
+                const target = e.currentTarget as HTMLImageElement | null;
+                if (target && target.naturalWidth && target.naturalHeight) {
+                  // 只在首次加载时设置尺寸
+                  if (!imgInfo.width || !imgInfo.height) {
+                    setTimeout(() => {
+                      // 避免多次 setState
+                      if (typeof window !== 'undefined') {
+                        const evt = new Event('resize');
+                        window.dispatchEvent(evt);
+                      }
+                    }, 0);
+                  }
+                }
+              }}
+              onError={() => {
+                // 只设置一次失败
+              }}
+            />
+          </div>
+          <div className="space-y-2 p-4">
+            <div className="text-base font-bold text-gray-100 truncate">{item.filename || item.file_id}</div>
+            <div className="text-xs text-gray-400">上传时间：{new Date(item.created_at).toLocaleString()}</div>
+            <div className="text-xs text-gray-400">标签：{item.tags || '-'}</div>
+            <div className="text-xs text-gray-400">尺寸：{imgInfo.width} × {imgInfo.height}</div>
+            <div className="text-xs text-gray-400">大小：{imgInfo.size > 0 ? (imgInfo.size > 1024*1024 ? (imgInfo.size/1024/1024).toFixed(2)+' MB' : (imgInfo.size/1024).toFixed(1)+' KB') : '-'}</div>
+            {/* 操作按钮区域 */}
+            <div className="flex gap-2 mt-3">
+              <button
+                className="px-3 py-1 text-xs bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
+                onClick={handleDownload}
+              >
+                📥 下载
+              </button>
+              <button
+                className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                onClick={onDelete}
+              >
+                🗑️ 删除
+              </button>
+            </div>
+            {item.short_code && (
+              <>
+                <div className="text-xs text-gray-400 flex items-center">直链：
+                  <a href={`${SHORTLINK_DOMAIN}/img/${item.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline break-all ml-1">{`${SHORTLINK_DOMAIN}/img/${item.short_code}`}</a>
+                  <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`${SHORTLINK_DOMAIN}/img/${item.short_code}`)}>复制</button>
+                </div>
+                <div className="text-xs text-gray-400 flex items-center">Markdown：
+                  <a href={`${SHORTLINK_DOMAIN}/img/${item.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline mx-1" style={{ wordBreak: 'break-all' }}>{`![](${SHORTLINK_DOMAIN}/img/${item.short_code})`}</a>
+                  <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`![](${SHORTLINK_DOMAIN}/img/${item.short_code})`)}>复制</button>
+                </div>
+                <div className="text-xs text-gray-400 flex items-center">HTML：
+                  <a href={`${SHORTLINK_DOMAIN}/img/${item.short_code}`} target="_blank" rel="noopener" className="text-cyan-400 underline mx-1" style={{ wordBreak: 'break-all' }}>{`<img src=\"${SHORTLINK_DOMAIN}/img/${item.short_code}\" />`}</a>
+                  <button className="ml-2 px-2 py-1 text-xs bg-[#232b36] rounded hover:bg-cyan-700 text-cyan-300" onClick={()=>handleCopy(`<img src=\"${SHORTLINK_DOMAIN}/img/${item.short_code}\" />`)}>复制</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
 }
 
 export default App;
